@@ -184,7 +184,7 @@ func vizual(w http.ResponseWriter, r *http.Request) {
 }
 
 func main() {
-	for i := 0; i < 100000; i++ {
+	for i := 0; i < 100; i++ {
 		m[i] = "string " + fmt.Sprintf("%d", i)
 	}
 
@@ -270,10 +270,11 @@ func getJSON[K comparable, V any](m map[K]V) []byte {
 		}
 	}
 	
-	//res, err := json.MarshalIndent(allBuckets, "", "	")
-	res, err := json.Marshal(map[string]any{
-		"buckets": allBuckets,
-	})
+//	res, err := json.MarshalIndent(allBuckets, "", "	")
+	res, err := json.Marshal(allBuckets)
+	//res, err := json.Marshal(map[string]any{
+	//	"buckets": allBuckets,
+	//})
 	if err != nil {
 		return []byte{}
 	}
