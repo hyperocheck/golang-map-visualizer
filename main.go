@@ -177,7 +177,7 @@ func main() {
 	}
 
 	m := make(map[int]s)
-	for i := range 100000 {
+	for i := range 1000 {
 		m[i] = s {
 			Vec: []int{i},
 			B: true,
@@ -192,9 +192,9 @@ func main() {
 
 type bucketJSON[K comparable, V any] struct {
 	Tophash  [8]uint8 `json:"tophash"` 
-	Keys     [8]K     `json:"keys`
-	Values   [8]V 	  `json:"values`
-	Overflow string   `json:"overflow"`
+	Keys     [8]*K     `json:"keys, omitempty`
+	Values   [8]*V 	  `json:"values,omitempty`
+	Overflow string   `json:"overflow"`  // просто для визуализации адреса типа 0x......
 
 	Type     string   `json:"type"`// main || overflow
 	ID       int      `json:"id"`  // просто на всякий случай, может на фронте это будет нужно
@@ -218,11 +218,10 @@ func getJSON[K comparable, V any](m map[K]V) []byte {
 		bucket := (*_bucket_[K, V])(unsafe.Pointer(uintptr(b) + i * bucketSize)) 
 		
 		new_main_bucket.Tophash = bucket.tophash 
-		new_main_bucket.Keys = bucket.keys 
-		new_main_bucket.Values = bucket.values
 		new_main_bucket.ID = id
 		new_main_bucket.Type = "main"
 		
+		fillBucket(&new_main_bucket, bucket)
 		if bucket.overflow != nil {
 			new_main_bucket.Overflow = fmt.Sprintf("0x%x", bucket.overflow)
 		} else {
@@ -239,12 +238,10 @@ func getJSON[K comparable, V any](m map[K]V) []byte {
 			obucket := (*_bucket_[K, V])(unsafe.Pointer(curr_overflow_addr))
 			
 			new_overflow_bucket.Tophash = obucket.tophash 
-			new_overflow_bucket.Keys = obucket.keys 
-			new_overflow_bucket.Values = obucket.values
 			new_overflow_bucket.ID = id
 			new_overflow_bucket.Type = "overflow"
 			
-
+			fillBucket(&new_overflow_bucket, obucket)
 			if obucket.overflow != nil {
 				new_overflow_bucket.Overflow = fmt.Sprintf("0x%x", obucket.overflow)
 			} else {
@@ -266,6 +263,19 @@ func getJSON[K comparable, V any](m map[K]V) []byte {
 	return res
 }
 
+func fillBucket[K comparable, V any](b *bucketJSON[K, V], rb *_bucket_[K, V]) {
+	for j := 0; j < 8; j++ {
+		if rb.tophash[j] < 5 {
+			b.Keys[j] = nil
+			b.Values[j] = nil
+		} else {
+			kCopy := rb.keys[j]
+			vCopy := rb.values[j]
+			b.Keys[j] = &kCopy
+			b.Values[j] = &vCopy
+		}
+	}
+}
 
 func generate[K comparable, V any](m map[K]V) {
 
