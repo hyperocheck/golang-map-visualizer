@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"unsafe"
+	"net/http"
 	"log"
 	"reflect"
 	"encoding/json"
@@ -34,9 +35,6 @@ type hmapJSON struct {
 	Extra       *mapextraJSON   `json:"extra,omitempty"`
 	IsGrowing   bool            `json:"isGrowing,omitempty"`   // oldbuckets != nil -> true
 }
-
-
-
 
 func get_hmap_json(h *hmap) ([]byte, error) {
 	if h == nil {
@@ -91,7 +89,6 @@ func get_hmap_json(h *hmap) ([]byte, error) {
 		jsonH.Extra = &extraJSON
 	}
 
-	// Красивый JSON с отступами (можно убрать Indent в проде для экономии трафика)
 	return json.MarshalIndent(jsonH, "", "  ")
 }
 
@@ -168,31 +165,49 @@ func inspectMap[K comparable, V any](m map[K]V) uintptr {
 	return uintptr(8) + 8*keySize + 8*valSize + ptrSize 
 }
 
+func getHmap[K comparable, V any](m map[K]V) *hmap {
+	if m == nil {
+		return nil
+	}
+	return *(**hmap)(unsafe.Pointer(&m))
+}
+
+var m = make(map[int]string)
+func vizual(w http.ResponseWriter, r *http.Request) {
+	fmt.Println("/vizual")
+	w.Header().Set("Content-Type", "application/json")
+
+	jsonBytes := getJSON(m)
+
+
+	w.Write(jsonBytes)
+}
+
 func main() {
-
-	type s struct {
-		Vec []int 
-		B bool 
-		I any
+	for i := 0; i < 100000; i++ {
+		m[i] = "string " + fmt.Sprintf("%d", i)
 	}
 
-	m := make(map[int]s)
-	for i := range 1000 {
-		m[i] = s {
-			Vec: []int{i},
-			B: true,
-			I: struct{}{},
-		}
-	}
+	fmt.Println(string(getJSON(m)))
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("/vizual", vizual)
+	mux.Handle("/", http.FileServer(http.Dir("frontend/dist")))
+
+	fmt.Println("Сервер запущен: http://localhost:8080/vizual")
+	log.Fatal(http.ListenAndServe(":8080", mux))
+}
+
 
 	//generate(m)
-	fmt.Println(string(getJSON(m)))
-}
+	//fmt.Println(string(getJSON(m)))
+	// res, _ := get_hmap_json(getHmap(m))
+	// fmt.Println(string(res))
 
 
 type bucketJSON[K comparable, V any] struct {
 	Tophash  [8]uint8 `json:"tophash"` 
-	Keys     [8]*K     `json:"keys, omitempty`
+	Keys     [8]*K     `json:"keys,omitempty`
 	Values   [8]*V 	  `json:"values,omitempty`
 	Overflow string   `json:"overflow"`  // просто для визуализации адреса типа 0x......
 
@@ -225,7 +240,7 @@ func getJSON[K comparable, V any](m map[K]V) []byte {
 		if bucket.overflow != nil {
 			new_main_bucket.Overflow = fmt.Sprintf("0x%x", bucket.overflow)
 		} else {
-			new_main_bucket.Overflow = "<nil>"	
+			new_main_bucket.Overflow = "nil"	
 		}
 
 		allBuckets = append(allBuckets, new_main_bucket)
@@ -245,7 +260,7 @@ func getJSON[K comparable, V any](m map[K]V) []byte {
 			if obucket.overflow != nil {
 				new_overflow_bucket.Overflow = fmt.Sprintf("0x%x", obucket.overflow)
 			} else {
-				new_overflow_bucket.Overflow = "<nil>"	
+				new_overflow_bucket.Overflow = "nil"	
 			}
 
 			curr_overflow_addr = obucket.overflow
@@ -255,7 +270,10 @@ func getJSON[K comparable, V any](m map[K]V) []byte {
 		}
 	}
 	
-	res, err := json.MarshalIndent(allBuckets, "", "	")
+	//res, err := json.MarshalIndent(allBuckets, "", "	")
+	res, err := json.Marshal(map[string]any{
+		"buckets": allBuckets,
+	})
 	if err != nil {
 		return []byte{}
 	}
