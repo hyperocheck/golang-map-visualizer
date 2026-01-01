@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"unsafe"
 	"reflect"
+	"encoding/json"
 	"github.com/fatih/color"
 )
 
@@ -19,6 +20,77 @@ type hmap struct {
 	extra      *mapextra
 }
 
+type hmapJSON struct {
+	Count       int             `json:"count"`
+	Flags       uint8           `json:"flags"`
+	B           uint8           `json:"B"`
+	NumBuckets  int             `json:"numBuckets"`
+	NOverflow   uint16          `json:"noverflow"`
+	Hash0       uint32          `json:"hash0"`
+	Buckets     string          `json:"buckets"`   
+	OldBuckets  string          `json:"oldbuckets,omitempty"`
+	NEvacuate   uintptr         `json:"nevacuate"`
+	Extra       *mapextraJSON   `json:"extra,omitempty"`
+	IsGrowing   bool            `json:"isGrowing,omitempty"`   // oldbuckets != nil -> true
+}
+
+func get_hmap_json(h *hmap) ([]byte, error) {
+	if h == nil {
+		return []byte(`{"error":"hmap is nil"}`), nil
+	}
+
+	jsonH := hmapJSON{
+		Count:      h.count,
+		Flags:      h.flags,
+		B:          h.B,
+		NumBuckets: 1 << h.B,
+		NOverflow:  h.noverflow,
+		Hash0:      h.hash0,
+		Buckets:    fmt.Sprintf("%p", h.buckets),
+		NEvacuate:  h.nevacuate,
+		IsGrowing:  h.oldbuckets != nil,
+	}
+
+	if h.oldbuckets != nil {
+		jsonH.OldBuckets = fmt.Sprintf("%p", h.oldbuckets)
+	}
+
+	if h.extra != nil {
+		extraJSON := mapextraJSON{}
+
+		if h.extra.nextOverflow != nil {
+			extraJSON.NextOverflow = uintptr(unsafe.Pointer(h.extra.nextOverflow))
+		}
+
+		if h.extra.overflow != nil {
+			slice := *h.extra.overflow
+			addrs := make([]uintptr, len(slice))
+			for i, b := range slice {
+				if b != nil {
+					addrs[i] = uintptr(unsafe.Pointer(b))
+				}
+			}
+			extraJSON.Overflow = addrs
+		}
+
+		if h.extra.oldoverflow != nil {
+			slice := *h.extra.oldoverflow
+			addrs := make([]uintptr, len(slice))
+			for i, b := range slice {
+				if b != nil {
+					addrs[i] = uintptr(unsafe.Pointer(b))
+				}
+			}
+			extraJSON.OldOverflow = addrs
+		}
+
+		jsonH.Extra = &extraJSON
+	}
+
+	// Красивый JSON с отступами (можно убрать Indent в проде для экономии трафика)
+	return json.MarshalIndent(jsonH, "", "  ")
+}
+
 // только для мап у которых и key и value типы не ссылочные
 // например map[int32]bool{} map[float64]my_struct{}, где my_struct{i1 int32, i2 int32, i3 byte}
 // Зачем? оптимизация для GC: в каждом бакете есть ссыока в любом случае - это overflow 
@@ -30,6 +102,12 @@ type mapextra struct {
 	overflow    *[]*bmap
 	oldoverflow *[]*bmap
 	nextOverflow *bmap // это пул свободных оверфлоу бакетов, чтобы можно было быстро их взять и переиспользовать
+}
+
+type mapextraJSON struct {
+	Overflow     []uintptr `json:"overflow,omitempty"`    
+	OldOverflow  []uintptr `json:"oldoverflow,omitempty"` 
+	NextOverflow uintptr   `json:"nextOverflow,omitempty"`
 }
 
 type bmap struct {
@@ -109,6 +187,7 @@ func main() {
 	generate(m)
 }
 
+
 func generate[K comparable, V any](m map[K]V) {
 	type __noinline struct {
 		i1 uint64
@@ -117,7 +196,7 @@ func generate[K comparable, V any](m map[K]V) {
 
 	h := (**hmap)(unsafe.Pointer(&m))
 //	num_buckets := uintptr(1) << (*h).B
-	
+		
 	rbucket := inspectMap(m)
 
 	bucketSize := unsafe.Sizeof(rbucket)
@@ -150,8 +229,10 @@ func generate[K comparable, V any](m map[K]V) {
 	println(mstr)
 
 	fmt.Println((*mapextra)((*h).extra).overflow)
-
-	print_hmap(h)
+	
+	o, _ := get_hmap_json(*h)
+	fmt.Println(string(o))
+	//print_hmap(h)
 	
 	//buckets_P := (*[2]realBucket)(unsafe.Pointer((*h).buckets))
 
