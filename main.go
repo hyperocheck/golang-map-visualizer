@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"unsafe"
+	"log"
 	"reflect"
 	"encoding/json"
 	"github.com/fatih/color"
@@ -33,6 +34,9 @@ type hmapJSON struct {
 	Extra       *mapextraJSON   `json:"extra,omitempty"`
 	IsGrowing   bool            `json:"isGrowing,omitempty"`   // oldbuckets != nil -> true
 }
+
+
+
 
 func get_hmap_json(h *hmap) ([]byte, error) {
 	if h == nil {
@@ -148,23 +152,19 @@ type _bucket_[K comparable, V any] struct {
 	overflow unsafe.Pointer
 }
 
-func inspectMap[K comparable, V any](m map[K]V) _bucket_[K, V] {
+func inspectMap[K comparable, V any](m map[K]V) uintptr {
 			
-//	h := *(**hmap)(unsafe.Pointer(&m))
-
-	var new_bucket _bucket_[K, V]
-
 	keyType := reflect.TypeOf(*new(K))
 	valType := reflect.TypeOf(*new(V))
 	keySize := keyType.Size()
 	valSize := valType.Size()
-	ptrSize := unsafe.Sizeof(unsafe.Pointer(nil)) // 8 на 64-bit
+	ptrSize := unsafe.Sizeof(unsafe.Pointer(nil)) 
 
 	bucketSize := uintptr(8) + 8*keySize + 8*valSize + ptrSize
 	
-	fmt.Println(keyType, valType, keySize, valSize, ptrSize, bucketSize)
+	log.Println("map bucketSize=", bucketSize)
 
-	return new_bucket
+	return uintptr(8) + 8*keySize + 8*valSize + ptrSize
 }
 
 func main() {
@@ -189,23 +189,15 @@ func main() {
 
 
 func generate[K comparable, V any](m map[K]V) {
-	type __noinline struct {
-		i1 uint64
-		i2 uint64
-	}
 
 	h := (**hmap)(unsafe.Pointer(&m))
-//	num_buckets := uintptr(1) << (*h).B
 		
-	rbucket := inspectMap(m)
+	bucketSize := inspectMap(m)
 
-	bucketSize := unsafe.Sizeof(rbucket)
-	fmt.Printf("\n\nbucketSize: %d byte\n\n", bucketSize)
-	
 	cmax := 0
 	mstr := ""
 	for i := uintptr(0); i < uintptr(1) << (*h).B; i++ {
-		bucket := uintptr(unsafe.Pointer((*h).buckets)) + unsafe.Sizeof(rbucket) * i
+		bucket := uintptr(unsafe.Pointer((*h).buckets)) + bucketSize * i
 		rb := (*_bucket_[K, V])(unsafe.Pointer(bucket))
 		curr := rb.overflow
 		count := 0
@@ -214,8 +206,6 @@ func generate[K comparable, V any](m map[K]V) {
 			count++
 			maxstr += fmt.Sprintf("%v -> ", rb.overflow)
 			maxstr += fmt.Sprintf("%v - %v", (*_bucket_[K, V])(curr).keys, (*_bucket_[K, V])(curr).values)
-			// fmt.Printf("%v -> ", rb.overflow)
-			// fmt.Printf("%v - %v", (*realBucket)(curr).keys, (*realBucket)(curr).values)
 			fmt.Printf(maxstr)
 			curr = (*_bucket_[K, V])(curr).overflow
 		}
