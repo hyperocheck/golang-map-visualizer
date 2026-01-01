@@ -152,6 +152,7 @@ type _bucket_[K comparable, V any] struct {
 	overflow unsafe.Pointer
 }
 
+
 func inspectMap[K comparable, V any](m map[K]V) uintptr {
 			
 	keyType := reflect.TypeOf(*new(K))
@@ -164,27 +165,105 @@ func inspectMap[K comparable, V any](m map[K]V) uintptr {
 	
 	log.Println("map bucketSize=", bucketSize)
 
-	return uintptr(8) + 8*keySize + 8*valSize + ptrSize
+	return uintptr(8) + 8*keySize + 8*valSize + ptrSize 
 }
 
 func main() {
 
 	type s struct {
-		vec []int 
-		b bool 
-		i any
+		Vec []int 
+		B bool 
+		I any
 	}
 
 	m := make(map[int]s)
 	for i := range 100000 {
 		m[i] = s {
-			vec: []int{i},
-			b: true,
-			i: struct{}{},
+			Vec: []int{i},
+			B: true,
+			I: struct{}{},
 		}
 	}
 
-	generate(m)
+	//generate(m)
+	fmt.Println(string(getJSON(m)))
+}
+
+
+type bucketJSON[K comparable, V any] struct {
+	Tophash  [8]uint8 `json:"tophash"` 
+	Keys     [8]K     `json:"keys`
+	Values   [8]V 	  `json:"values`
+	Overflow string   `json:"overflow"`
+
+	Type     string   `json:"type"`// main || overflow
+	ID       int      `json:"id"`  // просто на всякий случай, может на фронте это будет нужно
+}
+
+func getJSON[K comparable, V any](m map[K]V) []byte {
+	
+	h := (**hmap)(unsafe.Pointer(&m))
+
+	bucketSize := inspectMap(m)
+	bucketNum := uintptr(1) << (*h).B
+
+	allBuckets := []bucketJSON[K, V]{}
+	id := 0
+
+	b := (*h).buckets 
+	for i := uintptr(0); i < bucketNum; i++ {
+		
+		var new_main_bucket bucketJSON[K, V]
+
+		bucket := (*_bucket_[K, V])(unsafe.Pointer(uintptr(b) + i * bucketSize)) 
+		
+		new_main_bucket.Tophash = bucket.tophash 
+		new_main_bucket.Keys = bucket.keys 
+		new_main_bucket.Values = bucket.values
+		new_main_bucket.ID = id
+		new_main_bucket.Type = "main"
+		
+		if bucket.overflow != nil {
+			new_main_bucket.Overflow = fmt.Sprintf("0x%x", bucket.overflow)
+		} else {
+			new_main_bucket.Overflow = "<nil>"	
+		}
+
+		allBuckets = append(allBuckets, new_main_bucket)
+		id++
+
+		curr_overflow_addr := bucket.overflow 
+		for ;curr_overflow_addr != nil; {
+			var new_overflow_bucket bucketJSON[K, V]
+			
+			obucket := (*_bucket_[K, V])(unsafe.Pointer(curr_overflow_addr))
+			
+			new_overflow_bucket.Tophash = obucket.tophash 
+			new_overflow_bucket.Keys = obucket.keys 
+			new_overflow_bucket.Values = obucket.values
+			new_overflow_bucket.ID = id
+			new_overflow_bucket.Type = "overflow"
+			
+
+			if obucket.overflow != nil {
+				new_overflow_bucket.Overflow = fmt.Sprintf("0x%x", obucket.overflow)
+			} else {
+				new_overflow_bucket.Overflow = "<nil>"	
+			}
+
+			curr_overflow_addr = obucket.overflow
+
+			allBuckets = append(allBuckets, new_overflow_bucket)
+			id++
+		}
+	}
+	
+	res, err := json.MarshalIndent(allBuckets, "", "	")
+	if err != nil {
+		return []byte{}
+	}
+
+	return res
 }
 
 
@@ -193,6 +272,13 @@ func generate[K comparable, V any](m map[K]V) {
 	h := (**hmap)(unsafe.Pointer(&m))
 		
 	bucketSize := inspectMap(m)
+
+
+	//numBuckets := int(1 << h.B)
+
+	
+	
+
 
 	cmax := 0
 	mstr := ""
