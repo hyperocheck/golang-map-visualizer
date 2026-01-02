@@ -26,7 +26,7 @@ type hmapJSON struct {
 	Count       int             `json:"count"`
 	Flags       uint8           `json:"flags"`
 	B           uint8           `json:"B"`
-	NumBuckets  int             `json:"numBuckets"`
+	NumBuckets  int             `json:"numBuckets.omitempty"`
 	NOverflow   uint16          `json:"noverflow"`
 	Hash0       uint32          `json:"hash0"`
 	Buckets     string          `json:"buckets"`   
@@ -45,17 +45,13 @@ func get_hmap_json(h *hmap) ([]byte, error) {
 		Count:      h.count,
 		Flags:      h.flags,
 		B:          h.B,
-		NumBuckets: 1 << h.B,
+		//NumBuckets: 1 << h.B,
 		NOverflow:  h.noverflow,
 		Hash0:      h.hash0,
 		Buckets:    fmt.Sprintf("%p", h.buckets),
+		OldBuckets: fmt.Sprintf("%p", h.oldbuckets),
 		NEvacuate:  h.nevacuate,
 		IsGrowing:  h.oldbuckets != nil,
-	}
-
-	if h.oldbuckets != nil {
-		jsonH.OldBuckets = fmt.Sprintf("%p", h.oldbuckets)
-		jsonH.IsGrowing = true
 	}
 
 	if h.extra != nil {
@@ -90,7 +86,8 @@ func get_hmap_json(h *hmap) ([]byte, error) {
 		jsonH.Extra = &extraJSON
 	}
 
-	return json.MarshalIndent(jsonH, "", "  ")
+	// return json.MarshalIndent(jsonH, "", "  ")
+	return json.Marshal(jsonH)
 }
 
 // только для мап у которых и key и value типы не ссылочные
@@ -180,10 +177,17 @@ func vizual(w http.ResponseWriter, r *http.Request) {
 
 	jsonBytes := getJSON(m)
 
-
 	w.Write(jsonBytes)
 }
- 
+
+func vizual_hmap(w http.ResponseWriter, r *http.Request) {
+	fmt.Println("/hmap")
+	w.Header().Set("Content-Type", "application/json")
+
+	res, _ := get_hmap_json(getHmap(m))
+	w.Write(res)
+}
+
 func main() {
 	for i := 0; i < 1500; i++ {
 		m[i] = "loooooSTRING 💀💀💀🦃" + fmt.Sprintf("%d", i)
@@ -197,6 +201,7 @@ func main() {
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/vizual", vizual)
+	mux.HandleFunc("/hmap", vizual_hmap)
 	mux.Handle("/", http.FileServer(http.Dir("frontend/dist")))
 
 	fmt.Println("Сервер запущен: http://localhost:8080/vizual")
