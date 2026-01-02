@@ -136,37 +136,43 @@
 		}
 	}
 
-	// ИСПРАВЛЕННЫЙ РЕСАЙЗ САЙДБАРА
 	function startResize(e) {
 		resizing = true;
-		const startX = e.clientX;
+		const startMouseX = e.clientX;
 		const startSideWidth = sideWidth;
 		
-		// Фиксируем масштаб (сколько единиц SVG в одном пикселе)
+		// 1. Фиксируем начальные параметры в момент клика
 		const container = document.getElementById('svg-container');
 		const initialRect = container.getBoundingClientRect();
-		const svgUnitsPerPixel = vb.w / initialRect.width;
+		
+		// Сколько единиц SVG приходится на 1 пиксель ширины экрана сейчас
+		const unitsPerPixel = vb.w / initialRect.width;
 
 		const onMouseMove = (ev) => {
 			if (!resizing) return;
-			const dx = startX - ev.clientX;
+			
+			// 2. Считаем дельту движения мыши
+			const dx = startMouseX - ev.clientX;
 			const newSideWidth = Math.max(100, Math.min(800, startSideWidth + dx));
 			
-			// Вычисляем, на сколько реально изменилась ширина контейнера в пикселях
-			const actualDiffPx = newSideWidth - sideWidth;
+			// 3. Вычисляем изменение ширины сайдбара
+			const diffPx = newSideWidth - sideWidth;
 			
 			// Обновляем ширину сайдбара
 			sideWidth = newSideWidth;
+
+			// 4. Корректируем viewBox.w
+			// Если сайдбар растет (diffPx > 0), контейнер сжимается -> vb.w должен уменьшиться
+			// Если сайдбар уменьшается (diffPx < 0), контейнер растет -> vb.w должен увеличиться
+			vb.w -= diffPx * unitsPerPixel;
+
+			// 5. Пересчитываем высоту viewBox по аспекту
+			// Используем фиксированный аспект начального контейнера, чтобы избежать дерганий
+			// при микро-изменениях высоты окна
+			const aspect = initialRect.height / (initialRect.width - (newSideWidth - startSideWidth));
+			vb.h = vb.w * aspect;
 			
-			// Корректируем viewBox.w, чтобы объекты не растягивались
-			// Мы вычитаем из логической ширины количество юнитов, которое "ушло" вместе с пикселями
-			vb.w -= actualDiffPx * svgUnitsPerPixel;
-			
-			// Обновляем высоту по пропорции нового контейнера
-			const newRect = container.getBoundingClientRect();
-			vb.h = vb.w * (newRect.height / newRect.width);
-			
-			vb = vb;
+			vb = vb; // Trigger Svelte
 		};
 
 		const onMouseUp = () => {
@@ -177,7 +183,8 @@
 
 		window.addEventListener('mousemove', onMouseMove);
 		window.addEventListener('mouseup', onMouseUp);
-	}
+	};
+
 
 	onMount(load);
 </script>
