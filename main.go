@@ -176,15 +176,6 @@ func getHmap[K comparable, V any](m map[K]V) *hmap {
 	return *(**hmap)(unsafe.Pointer(&m))
 }
 
-var m = make(map[int]string)
-func vizual(w http.ResponseWriter, r *http.Request) {
-	fmt.Println("/vizual")
-	w.Header().Set("Content-Type", "application/json")
-
-	jsonBytes := getJSON(m)
-
-	w.Write(jsonBytes)
-}
 
 var rainbowColors = []string{
 	"\033[31m", // Красный
@@ -423,6 +414,24 @@ func parseComplexOrSimple(input string, t reflect.Type) (interface{}, error) {
 	return ptr.Elem().Interface(), nil
 }
 
+var m = make(map[int]string)
+func vizual(w http.ResponseWriter, r *http.Request) {
+	fmt.Println("/vizual")
+	w.Header().Set("Content-Type", "application/json")
+
+	jsonBytes := getJSON(m, "buckets")
+
+	w.Write(jsonBytes)
+}
+
+func vizual_old(w http.ResponseWriter, r *http.Request) {
+	fmt.Println("/vizual_old")
+	w.Header().Set("Content-Type", "application/json")
+
+	jsonBytes := getJSON(m, "oldbuckets")
+
+	w.Write(jsonBytes)
+}
 
 func vizual_hmap(w http.ResponseWriter, r *http.Request) {
 	fmt.Println("/hmap")
@@ -435,7 +444,7 @@ func vizual_hmap(w http.ResponseWriter, r *http.Request) {
 
 func main() {
 	fmt.Println(RainbowString(preview))
-	for i := 0; i < 0; i++ {
+	for i := 0; i < 100; i++ {
 		m[i] = "🦃" + fmt.Sprintf("%d", i)
 	}
 
@@ -453,6 +462,7 @@ func main() {
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/vizual", vizual)
+	mux.HandleFunc("/vizual_old", vizual_old)
 	mux.HandleFunc("/hmap", vizual_hmap)
 	mux.Handle("/", http.FileServer(http.Dir("frontend/dist")))
 
@@ -469,28 +479,51 @@ func main() {
 
 type bucketJSON[K comparable, V any] struct {
 	Tophash  [8]uint8 `json:"tophash"` 
-	Keys     [8]*K     `json:"keys,omitempty`
-	Values   [8]*V 	  `json:"values,omitempty`
+	Keys     [8]*K     `json:"keys,omitempty"`
+	Values   [8]*V 	  `json:"values,omitempty"`
 	Overflow string   `json:"overflow"`  // просто для визуализации адреса типа 0x......
 
 	Type     string   `json:"type"`// main || overflow
 	ID       int      `json:"id"`  // просто на всякий случай, может на фронте это будет нужно
 }
 
-func getJSON[K comparable, V any](m map[K]V) []byte {
-
+func getJSON[K comparable, V any](m map[K]V, _type_ string) []byte {
+	
 	h := (**hmap)(unsafe.Pointer(&m))
+	if _type_ == "oldbuckets" && (*h).oldbuckets == nil {
+		return []byte("[]")
+	}
+
 	if (*h).buckets == nil && (*h).oldbuckets == nil && (*h).B == 0 {
 		return []byte("[]")
 	}
 
 	bucketSize := inspectMap(m)
-	bucketNum := uintptr(1) << (*h).B
+	
+	var bucketNum uintptr
+	var b unsafe.Pointer
+	
+	if _type_ == "oldbuckets" {
+		b = (*h).oldbuckets
+		if b == nil {
+			return []byte("[]")
+		}
+		// oldbuckets имеет размер в 2 раза меньше (B-1)
+		if (*h).B == 0 {
+			return []byte("[]")
+		}
+		bucketNum = uintptr(1) << ((*h).B - 1)
+	} else {
+		b = (*h).buckets
+		if b == nil {
+			return []byte("[]")
+		}
+		bucketNum = uintptr(1) << (*h).B
+	}
 
 	allBuckets := []bucketJSON[K, V]{}
 	id := 0
-
-	b := (*h).buckets 
+	
 	for i := uintptr(0); i < bucketNum; i++ {
 		
 		var new_main_bucket bucketJSON[K, V]
@@ -540,7 +573,7 @@ func getJSON[K comparable, V any](m map[K]V) []byte {
 	//res, err := json.Marshal(map[string]any{
 	//	"buckets": allBuckets,
 	//}) 
-	fmt.Println("-----------------","len:", len(res), " res:", string(res))
+	fmt.Println("-----------------","len:", len(res), " res:", string(res), " type:", _type_)
 	if err != nil || len(res) == 0 {
 		return []byte("[]")
 	}
@@ -612,6 +645,7 @@ func generate[K comparable, V any](m map[K]V) {
 
 	//fmt.Printf("%v\n", buckets_P)
 }
+
 
 
 
