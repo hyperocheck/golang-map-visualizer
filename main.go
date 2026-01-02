@@ -33,7 +33,7 @@ type hmapJSON struct {
 	OldBuckets  string          `json:"oldbuckets,omitempty"`
 	NEvacuate   uintptr         `json:"nevacuate"`
 	Extra       *mapextraJSON   `json:"extra,omitempty"`
-	IsGrowing   bool            `json:"isGrowing,omitempty"`   // oldbuckets != nil -> true
+	IsGrowing   bool            `json:"isgrowing"`
 }
 
 func get_hmap_json(h *hmap) ([]byte, error) {
@@ -184,11 +184,12 @@ func vizual(w http.ResponseWriter, r *http.Request) {
 }
 
 func main() {
-	for i := 0; i < 100; i++ {
+	for i := 0; i < 5000; i++ {
 		m[i] = "string " + fmt.Sprintf("%d", i)
 	}
 
-	fmt.Println(string(getJSON(m)))
+	//fmt.Println(string(getJSON(m)))
+	generate(m)
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/vizual", vizual)
@@ -321,22 +322,22 @@ func generate[K comparable, V any](m map[K]V) {
 			count++
 			maxstr += fmt.Sprintf("%v -> ", rb.overflow)
 			maxstr += fmt.Sprintf("%v - %v", (*_bucket_[K, V])(curr).keys, (*_bucket_[K, V])(curr).values)
-			fmt.Printf(maxstr)
+			//fmt.Printf(maxstr)
 			curr = (*_bucket_[K, V])(curr).overflow
 		}
 		if count > cmax {
 			cmax = count 
 			mstr = maxstr
 		}
-		fmt.Printf("nil\n")
+		//fmt.Printf("nil\n")
 	}
-	println(cmax)
-	println(mstr)
+	fmt.Println("COUNT: ", cmax)
+	fmt.Println(mstr)
 
-	fmt.Println((*mapextra)((*h).extra).overflow)
+	//fmt.Println((*mapextra)((*h).extra).overflow)
 	
-	o, _ := get_hmap_json(*h)
-	fmt.Println(string(o))
+	//o, _ := get_hmap_json(*h)
+	//fmt.Println(string(o))
 	//print_hmap(h)
 	
 	//buckets_P := (*[2]realBucket)(unsafe.Pointer((*h).buckets))
