@@ -20,42 +20,50 @@
 	let svgWidth = 2000;
 	let svgHeight = 2000;
 
-	// viewBox: x, y, width, height
+	// Состояние viewBox [x, y, width, height]
 	let vb = { x: 0, y: 0, w: 1200, h: 900 };
 
+	// Состояние панелей
 	let sideWidth = 280;
+	let lastSideWidth = 280;
+	let isSideVisible = true;
 	let resizing = false;
 	let isPanning = false;
 
 	async function load() {
-		const [vizRes, hmapRes] = await Promise.all([
-			fetch('/vizual'),
-			fetch('/hmap')
-		]);
-		buckets = await vizRes.json();
-		hmap = await hmapRes.json();
-		
-		chains = [];
-		let current = [];
-		for (const b of buckets) {
-			if (b.type === 'main') {
-				if (current.length) chains.push(current);
-				current = [b];
-			} else {
-				current.push(b);
+		try {
+			const [vizRes, hmapRes] = await Promise.all([
+				fetch('/vizual'),
+				fetch('/hmap')
+			]);
+			buckets = await vizRes.json();
+			hmap = await hmapRes.json();
+			
+			chains = [];
+			let current = [];
+			for (const b of buckets) {
+				if (b.type === 'main') {
+					if (current.length) chains.push(current);
+					current = [b];
+				} else {
+					current.push(b);
+				}
 			}
-		}
-		if (current.length) chains.push(current);
-		
-		buildSVG();
-		
-		const container = document.getElementById('svg-container');
-		if (container) {
-			const rect = container.getBoundingClientRect();
-			const aspect = rect.height / rect.width;
-			vb.w = 1200;
-			vb.h = 1200 * aspect;
-			vb = vb;
+			if (current.length) chains.push(current);
+			
+			buildSVG();
+			
+			// Начальная подстройка viewBox под контейнер
+			const container = document.getElementById('svg-container');
+			if (container) {
+				const rect = container.getBoundingClientRect();
+				const aspect = rect.height / rect.width;
+				vb.w = 1200;
+				vb.h = 1200 * aspect;
+				vb = vb;
+			}
+		} catch (e) {
+			console.error("Ошибка загрузки данных:", e);
 		}
 	}
 
@@ -112,7 +120,7 @@
 			const newW = vb.w * zoomFactor;
 			const newH = vb.h * zoomFactor;
 
-			if (newW < 100 || newW > 20000) return;
+			if (newW < 100 || newW > 40000) return;
 
 			vb.x = svgMouseX - (mouseX / rect.width) * newW;
 			vb.y = svgMouseY - (mouseY / rect.height) * newH;
@@ -136,43 +144,33 @@
 		}
 	}
 
+	// ФИКС РЕСАЙЗА: Линейный расчет без тряски
 	function startResize(e) {
 		resizing = true;
 		const startMouseX = e.clientX;
 		const startSideWidth = sideWidth;
 		
-		// 1. Фиксируем начальные параметры в момент клика
+		// Фиксируем масштаб и аспект один раз в момент клика
 		const container = document.getElementById('svg-container');
 		const initialRect = container.getBoundingClientRect();
-		
-		// Сколько единиц SVG приходится на 1 пиксель ширины экрана сейчас
 		const unitsPerPixel = vb.w / initialRect.width;
+		const aspect = initialRect.height / initialRect.width;
 
 		const onMouseMove = (ev) => {
 			if (!resizing) return;
-			
-			// 2. Считаем дельту движения мыши
 			const dx = startMouseX - ev.clientX;
 			const newSideWidth = Math.max(100, Math.min(800, startSideWidth + dx));
-			
-			// 3. Вычисляем изменение ширины сайдбара
 			const diffPx = newSideWidth - sideWidth;
 			
-			// Обновляем ширину сайдбара
+			// Синхронное обновление CSS и viewBox
 			sideWidth = newSideWidth;
-
-			// 4. Корректируем viewBox.w
-			// Если сайдбар растет (diffPx > 0), контейнер сжимается -> vb.w должен уменьшиться
-			// Если сайдбар уменьшается (diffPx < 0), контейнер растет -> vb.w должен увеличиться
-			vb.w -= diffPx * unitsPerPixel;
-
-			// 5. Пересчитываем высоту viewBox по аспекту
-			// Используем фиксированный аспект начального контейнера, чтобы избежать дерганий
-			// при микро-изменениях высоты окна
-			const aspect = initialRect.height / (initialRect.width - (newSideWidth - startSideWidth));
-			vb.h = vb.w * aspect;
+			vb.w -= diffPx * unitsPerPixel; 
 			
-			vb = vb; // Trigger Svelte
+			// Используем математический аспект вместо опроса DOM для плавности
+			const currentContainerWidth = initialRect.width - (newSideWidth - startSideWidth);
+			vb.h = vb.w * (initialRect.height / currentContainerWidth);
+			
+			vb = vb;
 		};
 
 		const onMouseUp = () => {
@@ -183,8 +181,30 @@
 
 		window.addEventListener('mousemove', onMouseMove);
 		window.addEventListener('mouseup', onMouseUp);
-	};
+	}
 
+	function toggleSide() {
+		const container = document.getElementById('svg-container');
+		const rect = container.getBoundingClientRect();
+		const unitsPerPixel = vb.w / rect.width;
+
+		if (isSideVisible) {
+			lastSideWidth = sideWidth;
+			vb.w += sideWidth * unitsPerPixel;
+			sideWidth = 0;
+			isSideVisible = false;
+		} else {
+			sideWidth = lastSideWidth;
+			vb.w -= sideWidth * unitsPerPixel;
+			isSideVisible = true;
+		}
+		
+		setTimeout(() => {
+			const newRect = container.getBoundingClientRect();
+			vb.h = vb.w * (newRect.height / newRect.width);
+			vb = vb;
+		}, 0);
+	}
 
 	onMount(load);
 </script>
@@ -198,6 +218,10 @@
 		on:mouseup={handleMouseUp}
 		on:mouseleave={handleMouseUp}
 	>
+		<button class="toggle-btn" on:click={toggleSide}>
+			{isSideVisible ? '→' : '← hmap'}
+		</button>
+
 		<svg 
 			viewBox="{vb.x} {vb.y} {vb.w} {vb.h}" 
 			width="100%" 
@@ -240,9 +264,11 @@
 		</svg>
 	</div>
 
-	<div class="splitter" on:mousedown={startResize}></div>
+	{#if isSideVisible}
+		<div class="splitter" on:mousedown={startResize}></div>
+	{/if}
 
-	<div class="side" style="width: {sideWidth}px;">
+	<div class="side" style="width: {sideWidth}px; display: {isSideVisible ? 'block' : 'none'};">
 		<h3>hmap</h3>
 		{#if hmap}
 			{#each Object.entries(hmap) as [k, v]}
@@ -270,8 +296,24 @@
 		overflow: hidden;
 		cursor: grab;
 		touch-action: none;
+		transition: none !important;
 	}
 	#svg-container:active { cursor: grabbing; }
+
+	.toggle-btn {
+		position: absolute;
+		right: 15px;
+		top: 15px;
+		z-index: 100;
+		background: #ffffff;
+		border: 1px solid #ccc;
+		padding: 6px 12px;
+		border-radius: 6px;
+		cursor: pointer;
+		font-family: sans-serif;
+		font-weight: 500;
+		box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+	}
 
 	.splitter {
 		width: 6px;
@@ -279,9 +321,7 @@
 		cursor: col-resize;
 		user-select: none;
 		z-index: 10;
-		transition: background 0.2s;
 	}
-	.splitter:hover { background: #bbb; }
 
 	.side {
 		padding: 12px;
@@ -291,6 +331,7 @@
 		font-family: monospace;
 		font-size: 13px;
 		flex-shrink: 0;
+		transition: none !important;
 	}
 
 	svg {
@@ -298,8 +339,8 @@
 		user-select: none;
 	}
 
-	.row { display: flex; justify-content: space-between; padding: 2px 0; }
-	.bucket-group:hover .bucket-rect { stroke: red; stroke-width: 2.5; }
+	.row { display: flex; justify-content: space-between; padding: 2px 0; border-bottom: 1px solid #eee; }
+	.bucket-group:hover .bucket-rect { stroke: #228be6; stroke-width: 2.5; }
 	.cell-key:hover { fill: #9feaa4; }
 	.cell-value:hover { fill: #ffe066; }
 </style>
