@@ -189,7 +189,7 @@ func vizual_hmap(w http.ResponseWriter, r *http.Request) {
 }
 
 func main() {
-	for i := 0; i < 1500; i++ {
+	for i := 0; i < 5000; i++ {
 		m[i] = "loooooSTRING 💀💀💀🦃" + fmt.Sprintf("%d", i)
 	}
 

@@ -1,8 +1,10 @@
 <script>
 	import { onMount } from 'svelte';
+
 	let buckets = [];
 	let chains = [];
 	let hmap = null;
+
 	const tophashHeight = 24;
 	const rowHeight = 22;
 	const gapX = 80;
@@ -11,15 +13,20 @@
 	const bucketRadius = 12;
 	const padding = 12;
 	const bucketStrokeWidth = 1.5;
-	const fixedTophashCellWidth = 27; // фиксированная ширина каждой ячейки tophash
+	const fixedTophashCellWidth = 27;
+
 	let svgBuckets = [];
 	let svgArrows = [];
 	let svgWidth = 2000;
 	let svgHeight = 2000;
+
+	// viewBox: x, y, width, height
+	let vb = { x: 0, y: 0, w: 1200, h: 900 };
+
 	let sideWidth = 280;
 	let resizing = false;
-	let startX;
-	let startWidth;
+	let isPanning = false;
+
 	async function load() {
 		const [vizRes, hmapRes] = await Promise.all([
 			fetch('/vizual'),
@@ -27,6 +34,7 @@
 		]);
 		buckets = await vizRes.json();
 		hmap = await hmapRes.json();
+		
 		chains = [];
 		let current = [];
 		for (const b of buckets) {
@@ -38,62 +46,49 @@
 			}
 		}
 		if (current.length) chains.push(current);
+		
 		buildSVG();
-		setTimeout(() => {
-			const svgContainer = document.getElementById('svg-container');
-			if (svgContainer) {
-				svgContainer.scrollLeft = 0;
-				svgContainer.scrollTop = 0;
-			}
-		}, 0);
+		
+		const container = document.getElementById('svg-container');
+		if (container) {
+			const rect = container.getBoundingClientRect();
+			const aspect = rect.height / rect.width;
+			vb.w = 1200;
+			vb.h = 1200 * aspect;
+			vb = vb;
+		}
 	}
+
 	function buildSVG() {
 		svgBuckets = [];
 		svgArrows = [];
 		let x = gapX;
 		let maxY = 0;
+
 		for (const chain of chains) {
 			let y = gapY;
-			// минимальная ширина по сумме tophash
 			const fixedTophashWidth = Math.max(...chain.map(b => b.tophash.length)) * fixedTophashCellWidth;
-			// ищем максимальную ширину всех ключей, значений и overflow в цепочке
 			const chainWidths = chain.map(b => {
-				const allKeys = b.Keys.map(k => k ? k.toString().length : 0);
-				const allVals = b.Values.map(v => v ? v.toString().length : 0);
-				const overflowLen = b.overflow ? b.overflow.toString().length : 0;
-				const maxLen = Math.max(...allKeys, ...allVals, overflowLen, 0);
-				return maxLen * 8 + padding * 2; // 8px на символ + padding
+				const maxLen = Math.max(
+					...b.Keys.map(k => k ? k.toString().length : 0),
+					...b.Values.map(v => v ? v.toString().length : 0),
+					b.overflow ? b.overflow.toString().length : 0,
+					0
+				);
+				return maxLen * 8 + padding * 2;
 			});
 			const maxBucketWidthInChain = Math.max(...chainWidths, fixedTophashWidth, 260);
+
 			for (let i = 0; i < chain.length; i++) {
 				const b = chain[i];
 				const width = maxBucketWidthInChain;
-				const innerHeight =
-					tophashHeight +
-					b.Keys.length * rowHeight +
-					b.Values.length * rowHeight +
-					rowHeight; // overflow
-				const height = innerHeight + padding * 2;
-				svgBuckets.push({
-					id: b.id,
-					x,
-					y,
-					width,
-					height,
-					bucket: b,
-					padding
-				});
+				const height = tophashHeight + b.Keys.length * rowHeight + b.Values.length * rowHeight + rowHeight + padding * 2;
+				svgBuckets.push({ id: b.id, x, y, width, height, bucket: b, padding });
+				
 				if (i < chain.length - 1) {
-					const nextY = y + height + gapY;
-					svgArrows.push({
-						x: x + width / 2,
-						y1: y + height,
-						y2: nextY - arrowOffset
-					});
-					y = nextY;
-				} else {
+					svgArrows.push({ x: x + width / 2, y1: y + height, y2: y + height + gapY - arrowOffset });
 					y += height + gapY;
-				}
+				} else { y += height + gapY; }
 				if (y > maxY) maxY = y;
 			}
 			x += maxBucketWidthInChain + gapX;
@@ -101,157 +96,186 @@
 		svgWidth = x + 200;
 		svgHeight = maxY + 200;
 	}
+
+	// Навигация
+	function handleWheel(e) {
+		e.preventDefault();
+		const rect = e.currentTarget.getBoundingClientRect();
+		
+		if (e.ctrlKey || e.metaKey) {
+			const mouseX = e.clientX - rect.left;
+			const mouseY = e.clientY - rect.top;
+			const svgMouseX = vb.x + (mouseX * vb.w) / rect.width;
+			const svgMouseY = vb.y + (mouseY * vb.h) / rect.height;
+
+			const zoomFactor = Math.pow(1.001, e.deltaY * 5); 
+			const newW = vb.w * zoomFactor;
+			const newH = vb.h * zoomFactor;
+
+			if (newW < 100 || newW > 20000) return;
+
+			vb.x = svgMouseX - (mouseX / rect.width) * newW;
+			vb.y = svgMouseY - (mouseY / rect.height) * newH;
+			vb.w = newW;
+			vb.h = newH;
+		} else {
+			vb.x += (e.deltaX * vb.w) / rect.width;
+			vb.y += (e.deltaY * vb.h) / rect.height;
+		}
+		vb = vb;
+	}
+
+	function handleMouseDown(e) { if (e.button === 0) isPanning = true; }
+	function handleMouseUp() { isPanning = false; }
+	function handleMouseMove(e) {
+		if (isPanning) {
+			const rect = document.getElementById('svg-container').getBoundingClientRect();
+			vb.x -= (e.movementX * vb.w) / rect.width;
+			vb.y -= (e.movementY * vb.h) / rect.height;
+			vb = vb;
+		}
+	}
+
+	// ИСПРАВЛЕННЫЙ РЕСАЙЗ САЙДБАРА
 	function startResize(e) {
 		resizing = true;
-		startX = e.clientX;
-		startWidth = sideWidth;
-		document.addEventListener('mousemove', resize);
-		document.addEventListener('mouseup', stopResize);
+		const startX = e.clientX;
+		const startSideWidth = sideWidth;
+		
+		// Фиксируем масштаб (сколько единиц SVG в одном пикселе)
+		const container = document.getElementById('svg-container');
+		const initialRect = container.getBoundingClientRect();
+		const svgUnitsPerPixel = vb.w / initialRect.width;
+
+		const onMouseMove = (ev) => {
+			if (!resizing) return;
+			const dx = startX - ev.clientX;
+			const newSideWidth = Math.max(100, Math.min(800, startSideWidth + dx));
+			
+			// Вычисляем, на сколько реально изменилась ширина контейнера в пикселях
+			const actualDiffPx = newSideWidth - sideWidth;
+			
+			// Обновляем ширину сайдбара
+			sideWidth = newSideWidth;
+			
+			// Корректируем viewBox.w, чтобы объекты не растягивались
+			// Мы вычитаем из логической ширины количество юнитов, которое "ушло" вместе с пикселями
+			vb.w -= actualDiffPx * svgUnitsPerPixel;
+			
+			// Обновляем высоту по пропорции нового контейнера
+			const newRect = container.getBoundingClientRect();
+			vb.h = vb.w * (newRect.height / newRect.width);
+			
+			vb = vb;
+		};
+
+		const onMouseUp = () => {
+			resizing = false;
+			window.removeEventListener('mousemove', onMouseMove);
+			window.removeEventListener('mouseup', onMouseUp);
+		};
+
+		window.addEventListener('mousemove', onMouseMove);
+		window.addEventListener('mouseup', onMouseUp);
 	}
-	function resize(e) {
-		if (!resizing) return;
-		const dx = startX - e.clientX;
-		sideWidth = Math.max(100, Math.min(800, startWidth + dx));
-	}
-	function stopResize() {
-		resizing = false;
-		document.removeEventListener('mousemove', resize);
-		document.removeEventListener('mouseup', stopResize);
-	}
+
 	onMount(load);
 </script>
 
 <div class="root">
-	<div id="svg-container">
-		<svg width={svgWidth} height={svgHeight}>
+	<div 
+		id="svg-container" 
+		on:wheel|nonpassive={handleWheel}
+		on:mousedown={handleMouseDown}
+		on:mousemove={handleMouseMove}
+		on:mouseup={handleMouseUp}
+		on:mouseleave={handleMouseUp}
+	>
+		<svg 
+			viewBox="{vb.x} {vb.y} {vb.w} {vb.h}" 
+			width="100%" 
+			height="100%"
+			preserveAspectRatio="xMinYMin meet"
+		>
 			<defs>
 				<marker id="arrow" markerWidth="6" markerHeight="6" refX="3" refY="3" orient="auto">
 					<path d="M0,0 L6,3 L0,6 Z" fill="#000" />
 				</marker>
 			</defs>
-			{#each svgBuckets as b}
-				<g transform={`translate(${b.x}, ${b.y})`} class="bucket-group">
-					<rect
-						class="bucket-rect"
-						x={0}
-						y={0}
-						width={b.width}
-						height={b.height}
-						fill="#fff"
-						stroke="#000"
-						stroke-width={bucketStrokeWidth}
-						rx={bucketRadius}
-						ry={bucketRadius}
-					/>
-					<!-- TOPHASH FIXED -->
-					{#each b.bucket.tophash as t, i}
-						<rect
-							x={b.padding + i * fixedTophashCellWidth}
-							y={b.padding}
-							width={fixedTophashCellWidth}
-							height={tophashHeight}
-							fill="#eee"
-							stroke="#000"
-						/>
-						<text
-							x={b.padding + i * fixedTophashCellWidth + fixedTophashCellWidth / 2}
-							y={b.padding + tophashHeight / 1.5}
-							font-size="12"
-							text-anchor="middle"
-						>{t}</text>
-					{/each}
-					{#each b.bucket.Keys as k, i}
-						<rect
-							x={b.padding}
-							y={b.padding + tophashHeight + i * rowHeight}
-							width={b.width - padding * 2}
-							height={rowHeight}
-							fill={k == null ? '#dbfdc9' : '#b2f2bb'}
-							stroke="#12b886"
-							class="cell-key"
-						/>
-						<text
-							x={b.padding + 6}
-							y={b.padding + tophashHeight + i * rowHeight + rowHeight / 1.5}
-							font-size="13"
-						>{k ?? ''}</text>
-					{/each}
-					{#each b.bucket.Values as v, i}
-						<rect
-							x={b.padding}
-							y={b.padding + tophashHeight + b.bucket.Keys.length * rowHeight + i * rowHeight}
-							width={b.width - padding * 2}
-							height={rowHeight}
-							fill={v == null ? '#fff2b8' : '#ffec99'}
-							stroke="#ffa94d"
-							class="cell-value"
-						/>
-						<text
-							x={b.padding + 6}
-							y={b.padding + tophashHeight + b.bucket.Keys.length * rowHeight + i * rowHeight + rowHeight / 1.5}
-							font-size="13"
-						>{v ?? ''}</text>
-					{/each}
-					<rect
-						x={b.padding}
-						y={b.padding + tophashHeight + b.bucket.Keys.length * rowHeight + b.bucket.Values.length * rowHeight}
-						width={b.width - padding * 2}
-						height={rowHeight}
-						fill="#ddd"
-						stroke="#000"
-					/>
-					<text
-						x={b.padding + 6}
-						y={b.padding + tophashHeight + b.bucket.Keys.length * rowHeight + b.bucket.Values.length * rowHeight + rowHeight / 1.5}
-						font-size="12"
-					>{b.bucket.overflow}</text>
-				</g>
+
+			{#each svgBuckets as b (b.id)}
+				{#if b.x + b.width > vb.x && b.x < vb.x + vb.w && b.y + b.height > vb.y && b.y < vb.y + vb.h}
+					<g transform={`translate(${b.x}, ${b.y})`} class="bucket-group">
+						<rect class="bucket-rect" width={b.width} height={b.height} fill="#fff" stroke="#000" stroke-width={bucketStrokeWidth} rx={bucketRadius} ry={bucketRadius} />
+						{#each b.bucket.tophash as t, i}
+							<rect x={b.padding + i * fixedTophashCellWidth} y={b.padding} width={fixedTophashCellWidth} height={tophashHeight} fill="#eee" stroke="#000" />
+							<text x={b.padding + i * fixedTophashCellWidth + fixedTophashCellWidth / 2} y={b.padding + tophashHeight / 1.5} font-size="12" text-anchor="middle">{t}</text>
+						{/each}
+						{#each b.bucket.Keys as k, i}
+							<rect x={b.padding} y={b.padding + tophashHeight + i * rowHeight} width={b.width - padding * 2} height={rowHeight} fill={k == null ? '#dbfdc9' : '#b2f2bb'} stroke="#12b886" class="cell-key" />
+							<text x={b.padding + 6} y={b.padding + tophashHeight + i * rowHeight + rowHeight / 1.5} font-size="13">{k ?? ''}</text>
+						{/each}
+						{#each b.bucket.Values as v, i}
+							<rect x={b.padding} y={b.padding + tophashHeight + b.bucket.Keys.length * rowHeight + i * rowHeight} width={b.width - padding * 2} height={rowHeight} fill={v == null ? '#fff2b8' : '#ffec99'} stroke="#ffa94d" class="cell-value" />
+							<text x={b.padding + 6} y={b.padding + tophashHeight + b.bucket.Keys.length * rowHeight + i * rowHeight + rowHeight / 1.5} font-size="13">{v ?? ''}</text>
+						{/each}
+						<rect x={b.padding} y={b.padding + tophashHeight + b.bucket.Keys.length * rowHeight + b.bucket.Values.length * rowHeight} width={b.width - padding * 2} height={rowHeight} fill="#ddd" stroke="#000" />
+						<text x={b.padding + 6} y={b.padding + tophashHeight + b.bucket.Keys.length * rowHeight + b.bucket.Values.length * rowHeight + rowHeight / 1.5} font-size="12">{b.bucket.overflow}</text>
+					</g>
+				{/if}
 			{/each}
+
 			{#each svgArrows as a}
-				<line
-					x1={a.x}
-					y1={a.y1}
-					x2={a.x}
-					y2={a.y2}
-					stroke="#000"
-					stroke-width="2"
-					marker-end="url(#arrow)"
-				/>
+				{#if a.x > vb.x && a.x < vb.x + vb.w}
+					<line x1={a.x} y1={a.y1} x2={a.x} y2={a.y2} stroke="#000" stroke-width="2" marker-end="url(#arrow)" />
+				{/if}
 			{/each}
 		</svg>
 	</div>
+
 	<div class="splitter" on:mousedown={startResize}></div>
+
 	<div class="side" style="width: {sideWidth}px;">
 		<h3>hmap</h3>
 		{#if hmap}
 			{#each Object.entries(hmap) as [k, v]}
-				<div class="row">
-					<span>{k}</span>
-					<b>{v}</b>
-				</div>
+				<div class="row"><span>{k}</span><b>{v}</b></div>
 			{/each}
 		{/if}
 	</div>
 </div>
 
 <style>
+	:global(::-webkit-scrollbar) { width: 0 !important; height: 0 !important; display: none !important; }
+	:global(*) { -ms-overflow-style: none !important; scrollbar-width: none !important; }
+
 	.root {
 		display: flex;
 		width: 100vw;
 		height: 100vh;
 		overflow: hidden;
-	}
-	#svg-container {
-		flex: 1;
-		overflow: auto;
 		background: #ebfbee;
 	}
+
+	#svg-container {
+		flex: 1;
+		position: relative;
+		overflow: hidden;
+		cursor: grab;
+		touch-action: none;
+	}
+	#svg-container:active { cursor: grabbing; }
+
 	.splitter {
-		width: 5px;
+		width: 6px;
 		background: #ccc;
 		cursor: col-resize;
 		user-select: none;
+		z-index: 10;
+		transition: background 0.2s;
 	}
+	.splitter:hover { background: #bbb; }
+
 	.side {
 		padding: 12px;
 		border-left: 1px solid #ccc;
@@ -261,55 +285,15 @@
 		font-size: 13px;
 		flex-shrink: 0;
 	}
-	.side h3 {
-		margin: 0 0 10px;
-	}
-	.row {
-		display: flex;
-		justify-content: space-between;
-		padding: 2px 0;
-	}
+
 	svg {
 		display: block;
+		user-select: none;
 	}
-	.bucket-group:hover .bucket-rect {
-		stroke: red;
-	}
-	.cell-key:hover {
-		fill: #9feaa4;
-	}
-	.cell-value:hover {
-		fill: #ffe066;
-	}
-	/* 1. Скрываем стандартные полосы прокрутки браузера во всем приложении */
-	:global(::-webkit-scrollbar) {
-	    width: 0px;
-	    height: 0px;
-	    background: transparent; /* делает полосу полностью прозрачной */
-	}
-	
-	/* 2. Для Firefox (отдельное свойство) */
-	:global(*) {
-	    scrollbar-width: none;
-	}
-	
-	/* 3. Убеждаемся, что у корневых элементов не вылезают лишние полосы */
-	:global(html, body) {
-	    overflow: hidden; 
-	    margin: 0;
-	    padding: 0;
-	}
-	
-	/* Ваши контейнеры остаются с overflow, но без видимых полос */
-	#svg-container {
-	    flex: 1;
-	    overflow: auto; /* функционал прокрутки остается */
-	    background: #ebfbee;
-	    -ms-overflow-style: none; /* для старого Edge */
-	}
-	
-	.side {
-	    overflow-y: auto; /* функционал прокрутки остается */
-	    -ms-overflow-style: none;
-	}
+
+	.row { display: flex; justify-content: space-between; padding: 2px 0; }
+	.bucket-group:hover .bucket-rect { stroke: red; stroke-width: 2.5; }
+	.cell-key:hover { fill: #9feaa4; }
+	.cell-value:hover { fill: #ffe066; }
 </style>
+
