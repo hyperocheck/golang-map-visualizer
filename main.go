@@ -4,8 +4,12 @@ import (
 	"fmt"
 	"unsafe"
 	"net/http"
+	"strconv"
 	"log"
 	"reflect"
+	"bufio"
+	"os"
+	"strings"
 	"encoding/json"
 	"github.com/fatih/color"
 )
@@ -180,6 +184,244 @@ func vizual(w http.ResponseWriter, r *http.Request) {
 	w.Write(jsonBytes)
 }
 
+var rainbowColors = []string{
+	"\033[31m", // Красный
+	"\033[33m", // Оранжевый
+	"\033[32m", // Зеленый
+	"\033[36m", // Голубой
+	"\033[34m", // Синий
+	"\033[35m", // Фиолетовый
+}
+
+// Сброс цвета
+const reset = "\033[0m"
+
+// RainbowString принимает строку и возвращает её "радужной"
+func RainbowString(s string) string {
+	result := ""
+	colorCount := len(rainbowColors)
+	for i, ch := range s {
+		// Пропускаем пробелы и специальные символы, если хочешь можно и их красить
+		if ch != ' ' {
+			color := rainbowColors[i%colorCount]
+			result += color + string(ch) + reset
+		} else {
+			result += string(ch)
+		}
+	}
+	return result
+}
+
+var preview = `
+▄▄▄▄  ▗▞▀▜▌▄▄▄▄  ▄ ▄▄▄▄   ▄▄▄ ▄▄▄▄  ▗▞▀▚▖▗▞▀▘   ■   ▄▄▄   ▄▄▄     
+█ █ █ ▝▚▄▟▌█   █ ▄ █   █ ▀▄▄  █   █ ▐▛▀▀▘▝▚▄▖▗▄▟▙▄▖█   █ █        
+█   █      █▄▄▄▀ █ █   █ ▄▄▄▀ █▄▄▄▀ ▝▚▄▄▖      ▐▌  ▀▄▄▄▀ █        
+           █     █            █                ▐▌                 
+           ▀                  ▀                ▐▌                 
+`                                                                 
+
+func startCLI(m interface{}) {
+	val := reflect.ValueOf(m)
+	if val.Kind() != reflect.Map {
+		fmt.Println("Not a map!")
+		return
+	}
+
+	//mapType := val.Type()
+	//keyType := mapType.Key()
+	//elemType := mapType.Elem()
+
+	scanner := bufio.NewScanner(os.Stdin)
+	for {
+		fmt.Print("> ")
+		if !scanner.Scan() {
+			break
+		}
+		line := scanner.Text()
+		if line == "" {
+			continue
+		}
+
+		args := strings.Fields(line)
+		if len(args) == 0 {
+			continue
+		}
+
+		cmd := strings.ToLower(args[0])
+		switch cmd {
+		case "exit":
+			return
+		case "show":
+			showMap(val)
+		case "insert":
+			if len(args) < 3 {
+				fmt.Println("Usage: insert <key> <value>")
+				continue
+			}
+			err := insertElement(m, args[1], strings.Join(args[2:], " "))
+			if err != nil {
+				fmt.Println("Error:", err)
+			} else {
+				fmt.Println("Inserted element successfully")
+			}
+		case "update":
+			if len(args) < 3 {
+				fmt.Println("Usage: update <key> <value>")
+				continue
+			}
+			err := updateElement(m, args[1], strings.Join(args[2:], " "))
+			if err != nil {
+				fmt.Println("Error:", err)
+			} else {
+				fmt.Println("Updated element successfully")
+			}
+		case "delete":
+			if len(args) < 2 {
+				fmt.Println("Usage: delete <key>")
+				continue
+			}
+			err := deleteElement(m, strings.Join(args[1:], " "))
+			if err != nil {
+				fmt.Println("Error:", err)
+			} else {
+				fmt.Println("Deleted element successfully")
+			}
+		default:
+			fmt.Println("Unknown command:", cmd)
+		}
+	}
+}
+
+// showMap выводит текущую мапу в JSON формате
+func showMap(val reflect.Value) {
+	iter := val.MapRange()
+	for iter.Next() {
+		k := iter.Key().Interface()
+		v := iter.Value().Interface()
+		kJSON, _ := json.Marshal(k)
+		vJSON, _ := json.Marshal(v)
+		fmt.Printf("%s : %s\n", kJSON, vJSON)
+	}
+}
+
+func insertElement(m interface{}, keyStr, valueStr string) error {
+	val := reflect.ValueOf(m)
+	keyType := val.Type().Key()
+	elemType := val.Type().Elem()
+
+	key, err := parseComplexOrSimple(keyStr, keyType)
+	if err != nil {
+		return fmt.Errorf("invalid key: %v", err)
+	}
+	if val.MapIndex(reflect.ValueOf(key)).IsValid() {
+		return fmt.Errorf("key already exists")
+	}
+
+	value, err := parseComplexOrSimple(valueStr, elemType)
+	if err != nil {
+		return fmt.Errorf("invalid value: %v", err)
+	}
+
+	val.SetMapIndex(reflect.ValueOf(key), reflect.ValueOf(value))
+	return nil
+}
+
+func updateElement(m interface{}, keyStr, valueStr string) error {
+	val := reflect.ValueOf(m)
+	keyType := val.Type().Key()
+	elemType := val.Type().Elem()
+
+	key, err := parseComplexOrSimple(keyStr, keyType)
+	if err != nil {
+		return fmt.Errorf("invalid key: %v", err)
+	}
+
+	value, err := parseComplexOrSimple(valueStr, elemType)
+	if err != nil {
+		return fmt.Errorf("invalid value: %v", err)
+	}
+
+	val.SetMapIndex(reflect.ValueOf(key), reflect.ValueOf(value))
+	return nil
+}
+
+func deleteElement(m interface{}, keyStr string) error {
+	val := reflect.ValueOf(m)
+	keyType := val.Type().Key()
+
+	key, err := parseComplexOrSimple(keyStr, keyType)
+	if err != nil {
+		return fmt.Errorf("invalid key: %v", err)
+	}
+
+	val.SetMapIndex(reflect.ValueOf(key), reflect.Value{})
+	return nil
+}
+
+
+func isSimpleType(t reflect.Type) bool {
+	switch t.Kind() {
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
+		reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64,
+		reflect.Float32, reflect.Float64,
+		reflect.Bool,
+		reflect.String:
+		return true
+	default:
+		return false
+	}
+}
+
+// Преобразуем строку в нужный простой тип
+func parseValue(input string, t reflect.Type) (interface{}, error) {
+	switch t.Kind() {
+	case reflect.String:
+		return input, nil
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		v, err := strconv.ParseInt(input, 10, 64)
+		if err != nil {
+			return nil, err
+		}
+		return reflect.ValueOf(v).Convert(t).Interface(), nil
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+		v, err := strconv.ParseUint(input, 10, 64)
+		if err != nil {
+			return nil, err
+		}
+		return reflect.ValueOf(v).Convert(t).Interface(), nil
+	case reflect.Float32, reflect.Float64:
+		v, err := strconv.ParseFloat(input, 64)
+		if err != nil {
+			return nil, err
+		}
+		return reflect.ValueOf(v).Convert(t).Interface(), nil
+	case reflect.Bool:
+		v, err := strconv.ParseBool(input)
+		if err != nil {
+			return nil, err
+		}
+		return v, nil
+	default:
+		return nil, fmt.Errorf("unsupported type %s, use JSON", t.Kind())
+	}
+}
+
+
+// Универсальная функция: если простой тип — парсим напрямую, если сложный — JSON
+func parseComplexOrSimple(input string, t reflect.Type) (interface{}, error) {
+	if isSimpleType(t) {
+		return parseValue(input, t)
+	}
+	// Сложный тип через JSON
+	ptr := reflect.New(t)
+	err := json.Unmarshal([]byte(input), ptr.Interface())
+	if err != nil {
+		return nil, err
+	}
+	return ptr.Elem().Interface(), nil
+}
+
+
 func vizual_hmap(w http.ResponseWriter, r *http.Request) {
 	fmt.Println("/hmap")
 	w.Header().Set("Content-Type", "application/json")
@@ -189,14 +431,21 @@ func vizual_hmap(w http.ResponseWriter, r *http.Request) {
 }
 
 func main() {
+	fmt.Println(RainbowString(preview))
 	for i := 0; i < 5000; i++ {
-		m[i] = "loooooSTRING 💀💀💀🦃" + fmt.Sprintf("%d", i)
+		m[i] = "🦃" + fmt.Sprintf("%d", i)
 	}
 
 	//fmt.Println(string(getJSON(m)))
 	generate(m)
 	h, _ := get_hmap_json(getHmap(m))
 	fmt.Println(string(h))
+
+	go func() {
+		fmt.Println("CLI Inspector запущен. Команды: show, delete <key>, update <key> <value>, exit")
+		startCLI(m) // универсальный CLI, который мы сделали
+		fmt.Println("CLI завершён")
+	}()
 	
 
 	mux := http.NewServeMux()
