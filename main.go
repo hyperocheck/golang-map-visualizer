@@ -27,21 +27,22 @@ type hmap struct {
 }
 
 type hmapJSON struct {
-	Count       int             `json:"count"`
-	Flags       uint8           `json:"flags"`
-	B           uint8           `json:"B"`
-	NumBuckets  int             `json:"numBuckets.omitempty"`
-	NOverflow   uint16          `json:"noverflow"`
-	Hash0       uint32          `json:"hash0"`
-	Buckets     string          `json:"buckets"`   
-	OldBuckets  string          `json:"oldbuckets,omitempty"`
-	NEvacuate   uintptr         `json:"nevacuate"`
-	Extra       *mapextraJSON   `json:"extra,omitempty"`
-	IsGrowing   bool            `json:"isgrowing"`
+	Count      int           `json:"count"`
+	Flags      uint8         `json:"flags"`
+	B          uint8         `json:"B"`
+	NumBuckets int           `json:"numBuckets"` 
+	NOverflow  uint16        `json:"noverflow"`
+	Hash0      uint32        `json:"hash0"`
+	Buckets    string        `json:"buckets"`
+	OldBuckets string        `json:"oldbuckets,omitempty"` 
+	NEvacuate  uintptr       `json:"nevacuate"`
+	Extra      *mapextraJSON `json:"extra,omitempty"`
+	IsGrowing  bool          `json:"isgrowing"`
 }
 
 func get_hmap_json(h *hmap) ([]byte, error) {
 	if h == nil {
+		fmt.Println("nil hmap")
 		return []byte(`{"error":"hmap is nil"}`), nil
 	}
 
@@ -49,7 +50,7 @@ func get_hmap_json(h *hmap) ([]byte, error) {
 		Count:      h.count,
 		Flags:      h.flags,
 		B:          h.B,
-		//NumBuckets: 1 << h.B,
+		NumBuckets: 1 << h.B,
 		NOverflow:  h.noverflow,
 		Hash0:      h.hash0,
 		Buckets:    fmt.Sprintf("%p", h.buckets),
@@ -91,6 +92,7 @@ func get_hmap_json(h *hmap) ([]byte, error) {
 	}
 
 	// return json.MarshalIndent(jsonH, "", "  ")
+	fmt.Println(jsonH)
 	return json.Marshal(jsonH)
 }
 
@@ -427,12 +429,13 @@ func vizual_hmap(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
 	res, _ := get_hmap_json(getHmap(m))
+	fmt.Println("РУЧКА", string(res))
 	w.Write(res)
 }
 
 func main() {
 	fmt.Println(RainbowString(preview))
-	for i := 0; i < 5000; i++ {
+	for i := 0; i < 0; i++ {
 		m[i] = "🦃" + fmt.Sprintf("%d", i)
 	}
 
@@ -475,8 +478,11 @@ type bucketJSON[K comparable, V any] struct {
 }
 
 func getJSON[K comparable, V any](m map[K]V) []byte {
-	
+
 	h := (**hmap)(unsafe.Pointer(&m))
+	if (*h).buckets == nil && (*h).oldbuckets == nil && (*h).B == 0 {
+		return []byte("[]")
+	}
 
 	bucketSize := inspectMap(m)
 	bucketNum := uintptr(1) << (*h).B
@@ -533,9 +539,10 @@ func getJSON[K comparable, V any](m map[K]V) []byte {
 	res, err := json.Marshal(allBuckets)
 	//res, err := json.Marshal(map[string]any{
 	//	"buckets": allBuckets,
-	//})
-	if err != nil {
-		return []byte{}
+	//}) 
+	fmt.Println("-----------------","len:", len(res), " res:", string(res))
+	if err != nil || len(res) == 0 {
+		return []byte("[]")
 	}
 
 	return res
@@ -571,6 +578,9 @@ func generate[K comparable, V any](m map[K]V) {
 	cmax := 0
 	mstr := ""
 	for i := uintptr(0); i < uintptr(1) << (*h).B; i++ {
+		if (*h).B == 0 {
+			break
+		}
 		bucket := uintptr(unsafe.Pointer((*h).buckets)) + bucketSize * i
 		rb := (*_bucket_[K, V])(unsafe.Pointer(bucket))
 		curr := rb.overflow
