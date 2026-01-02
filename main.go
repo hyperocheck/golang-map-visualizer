@@ -55,6 +55,7 @@ func get_hmap_json(h *hmap) ([]byte, error) {
 
 	if h.oldbuckets != nil {
 		jsonH.OldBuckets = fmt.Sprintf("%p", h.oldbuckets)
+		jsonH.IsGrowing = true
 	}
 
 	if h.extra != nil {
@@ -182,14 +183,17 @@ func vizual(w http.ResponseWriter, r *http.Request) {
 
 	w.Write(jsonBytes)
 }
-
+ 
 func main() {
-	for i := 0; i < 5000; i++ {
-		m[i] = "string " + fmt.Sprintf("%d", i)
+	for i := 0; i < 1500; i++ {
+		m[i] = "loooooSTRING 💀💀💀🦃" + fmt.Sprintf("%d", i)
 	}
 
 	//fmt.Println(string(getJSON(m)))
 	generate(m)
+	h, _ := get_hmap_json(getHmap(m))
+	fmt.Println(string(h))
+	
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/vizual", vizual)
