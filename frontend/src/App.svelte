@@ -116,7 +116,7 @@
 	onMount(load);
 </script>
 
-<div id="svg-container" style="width:100vw; height:100vh; overflow:auto; background:#f5f5f5;">
+<div id="svg-container" style="width:100vw; height:100vh; overflow:auto; background:#ebfbee;">
 	<svg width={svgWidth} height={svgHeight}>
 		<defs>
 			<marker id="arrow" markerWidth="6" markerHeight="6" refX="3" refY="3" orient="auto">
