@@ -1,6 +1,10 @@
 <script>
 	import { onMount } from 'svelte';
 
+	let socket = null;
+
+	let viewBoxInitialized = false;
+
 	let buckets = [];
 	let oldBuckets = [];
 	let chains = [];
@@ -85,18 +89,47 @@
 			
 			buildSVG();
 			
-			// Начальная подстройка viewBox под контейнер
-			const container = document.getElementById('svg-container');
-			if (container) {
+			if (!viewBoxInitialized) {
+				const container = document.getElementById('svg-container');
+				if (container) {
 				const rect = container.getBoundingClientRect();
 				const aspect = rect.height / rect.width;
 				vb.w = 1200;
 				vb.h = 1200 * aspect;
 				vb = vb;
+				viewBoxInitialized = true;
 			}
+}
 		} catch (e) {
 			console.error("Ошибка загрузки данных:", e);
 		}
+	}
+
+	function connectWS() {
+		if (socket) {
+			socket.close();
+		}
+	
+		const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+		socket = new WebSocket(`${proto}://${location.host}/ws`);
+	
+		socket.onopen = () => {
+			console.log('[ws] connected');
+		};
+	
+		socket.onmessage = () => {
+			// ВАЖНО: просто перегружаем данные
+			load();
+		};
+	
+		socket.onclose = () => {
+			console.log('[ws] disconnected, retrying...');
+			setTimeout(connectWS, 1000); // автопереподключение
+		};
+	
+		socket.onerror = () => {
+			socket.close();
+		};
 	}
 
 	function buildSVG() {
@@ -363,7 +396,10 @@
 		}, 0);
 	}
 
-	onMount(load);
+	onMount(() => {
+		load();        // начальная загрузка
+		connectWS();   // подписка на обновления
+	});
 </script>
 
 <div class="root">

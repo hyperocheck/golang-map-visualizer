@@ -10,31 +10,26 @@ import (
 	"time"
 
 	"visualizer/src/hmap"
+	"visualizer/src/ws"
 
 	"github.com/fatih/color"
 )
 
 func vizual(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
-
 	jsonBytes := hmap.GetBucketsJSON(m, "buckets")
-
 	w.Write(jsonBytes)
 }
 
 func vizual_old(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
-
 	jsonBytes := hmap.GetBucketsJSON(m, "oldbuckets")
-
 	w.Write(jsonBytes)
 }
 
 func vizual_hmap(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
-
 	res, _ := hmap.GetHmapJSON(hmap.GetHmap(m))
-
 	w.Write(res)
 }
 
@@ -44,6 +39,7 @@ func startServer(port string) error {
 	mux.HandleFunc("/vizual_old", vizual_old)
 	mux.HandleFunc("/hmap", vizual_hmap)
 	mux.Handle("/", http.FileServer(http.Dir("frontend/dist")))
+	mux.HandleFunc("/ws", ws.Handler)
 
 	srv := &http.Server{
 		Addr:    port,
