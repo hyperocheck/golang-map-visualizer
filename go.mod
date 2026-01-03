@@ -2,7 +2,10 @@ module visualizer
 
 go 1.23.12
 
-require github.com/fatih/color v1.18.0
+require (
+	github.com/fatih/color v1.18.0
+	github.com/gorilla/websocket v1.5.3
+)
 
 require (
 	github.com/mattn/go-colorable v0.1.13 // indirect

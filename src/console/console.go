@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"visualizer/src/hmap"
+	"visualizer/src/ws"
 
 	/* ------------------ */
 	// для примера
@@ -141,7 +142,10 @@ func StartConsole[K comparable, V any](m map[K]V) {
 				continue
 			}
 			m[key] = value
+			
 			green.Println("Inserted element successfully")
+
+			ws.NotifyUpdate()
 		case "update":
 			if len(args) < 3 {
 				yellow.Println("Usage: update <key> <value>")
@@ -163,6 +167,8 @@ func StartConsole[K comparable, V any](m map[K]V) {
 			}
 			m[key] = value
 			green.Println("Updated element successfully")
+
+			ws.NotifyUpdate()
 		case "delete":
 			if len(args) < 2 {
 				yellow.Println("Usage: delete <key>")
@@ -179,6 +185,8 @@ func StartConsole[K comparable, V any](m map[K]V) {
 			}
 			delete(m, key)
 			green.Println("Deleted element successfully")
+
+			ws.NotifyUpdate()
 		default:
 			red.Println("Unknown command:", cmd)
 		}
