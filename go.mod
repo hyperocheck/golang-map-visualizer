@@ -1,4 +1,4 @@
-module mapo
+module visualizer
 
 go 1.23.12
 
