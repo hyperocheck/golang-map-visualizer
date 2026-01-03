@@ -2,9 +2,9 @@
 	import { onMount } from 'svelte';
 
 	let socket = null;
-
+	let stats = null;
 	let viewBoxInitialized = false;
-
+	const bucketHeaderHeight = 18;
 	let buckets = [];
 	let oldBuckets = [];
 	let chains = [];
@@ -44,17 +44,36 @@
 				fetch('/vizual_old').catch(() => null),
 				fetch('/hmap').catch(() => null)
 			]);
-			
 			if (vizRes?.ok) {
-				buckets = await vizRes.json();
-				if (!Array.isArray(buckets)) buckets = [];
-			}
+				const data = await vizRes.json();
 			
+				// статистику сохраняем ВСЕГДА
+				stats = data.stats ?? null;
+			
+				// бакеты — только если массив и не пустой
+				if (Array.isArray(data.buckets) && data.buckets.length > 0) {
+					buckets = data.buckets;
+				} else {
+					buckets = [];
+					chains = [];
+					oldChains = [];
+					svgBuckets = [];
+					svgArrows = [];
+					svgLabels = [];
+				}
+			}			
 			if (oldRes?.ok) {
-				oldBuckets = await oldRes.json();
-				if (!Array.isArray(oldBuckets)) oldBuckets = [];
-			}
+				const data = await oldRes.json();
 			
+				// oldBuckets: берем ТОЛЬКО buckets
+				if (Array.isArray(data.buckets)) {
+					oldBuckets = data.buckets;
+				} else {
+					oldBuckets = [];
+				}
+			
+				// ВАЖНО: stats тут НЕ ТРОГАЕМ
+			}	
 			if (hmapRes?.ok) {
 				hmap = await hmapRes.json();
 			}
@@ -131,40 +150,43 @@
 			socket.close();
 		};
 	}
-
 	function buildSVG() {
 		svgBuckets = [];
 		svgArrows = [];
 		svgLabels = [];
-		
+	
 		const hasOldChains = oldChains && oldChains.length > 0;
 		const hasNewChains = chains && chains.length > 0;
-		const showLabels = hasOldChains && hasNewChains; // показываем метки только если есть обе цепочки
-		
-		// Собираем все цепочки и определяем ширины
-		const allChains = [];
+		const showLabels = hasOldChains && hasNewChains;
+	
+		// --- Считаем displayBid отдельно, только для main-бакетов ---
+		let mainCountOld = 0;
 		if (hasOldChains) {
-			oldChains.forEach(chain => {
-				if (chain && chain.length > 0) {
-					allChains.push({ chain, isOld: true });
+			for (const chain of oldChains) {
+				for (const b of chain) {
+					if (!b) continue;
+					if (b.type === 'main') b.displayBid = mainCountOld++;
 				}
-			});
+			}
 		}
+	
+		let mainCountNew = 0;
 		if (hasNewChains) {
-			chains.forEach(chain => {
-				if (chain && chain.length > 0) {
-					allChains.push({ chain, isOld: false });
+			for (const chain of chains) {
+				for (const b of chain) {
+					if (!b) continue;
+					if (b.type === 'main') b.displayBid = mainCountNew++;
 				}
-			});
+			}
 		}
-		
-		// Вычисляем ширины для каждой позиции
+	
+		// --- Вычисляем ширины цепочек как раньше ---
 		const chainWidths = [];
 		for (let idx = 0; idx < Math.max(hasOldChains ? oldChains.length : 0, hasNewChains ? chains.length : 0); idx++) {
 			let maxWidth = 260;
-			
-			// Проверяем old chain
-			if (hasOldChains && idx < oldChains.length && oldChains[idx] && oldChains[idx].length > 0) {
+	
+			// old chain
+			if (hasOldChains && idx < oldChains.length && oldChains[idx].length > 0) {
 				const chain = oldChains[idx];
 				const fixedTophashWidth = Math.max(...chain.map(b => (b.tophash && Array.isArray(b.tophash)) ? b.tophash.length : 0)) * fixedTophashCellWidth;
 				const widths = chain.map(b => {
@@ -180,9 +202,9 @@
 				});
 				maxWidth = Math.max(maxWidth, ...widths, fixedTophashWidth);
 			}
-			
-			// Проверяем new chain
-			if (hasNewChains && idx < chains.length && chains[idx] && chains[idx].length > 0) {
+	
+			// new chain
+			if (hasNewChains && idx < chains.length && chains[idx].length > 0) {
 				const chain = chains[idx];
 				const fixedTophashWidth = Math.max(...chain.map(b => (b.tophash && Array.isArray(b.tophash)) ? b.tophash.length : 0)) * fixedTophashCellWidth;
 				const widths = chain.map(b => {
@@ -198,33 +220,35 @@
 				});
 				maxWidth = Math.max(maxWidth, ...widths, fixedTophashWidth);
 			}
-			
+	
 			chainWidths.push(maxWidth);
 		}
-		
+	
 		let x = gapX;
 		let oldMaxY = 0;
 		let newMaxY = 0;
-		let oldStartY = gapY + (showLabels ? 30 : 0); // место для метки если нужно
+		let oldStartY = gapY + (showLabels ? 30 : 0);
 		let newStartY = gapY;
-		
-		// Сначала рисуем oldBuckets сверху
+	
+		// --- Рисуем oldBuckets ---
 		if (hasOldChains) {
 			for (let idx = 0; idx < oldChains.length; idx++) {
 				const chain = oldChains[idx];
 				if (!chain || chain.length === 0) continue;
-				
+	
 				const width = chainWidths[idx] || 260;
 				let y = oldStartY;
-				
+	
 				for (let i = 0; i < chain.length; i++) {
 					const b = chain[i];
 					if (!b) continue;
+	
 					const keys = (b.keys && Array.isArray(b.keys)) ? b.keys : [];
 					const values = (b.values && Array.isArray(b.values)) ? b.values : [];
-					const height = tophashHeight + keys.length * rowHeight + values.length * rowHeight + rowHeight + padding * 2;
+					const height = bucketHeaderHeight + tophashHeight + keys.length * rowHeight + values.length * rowHeight + rowHeight + padding * 2;
+	
 					svgBuckets.push({ id: `old-${b.id}`, x, y, width, height, bucket: b, padding, isOld: true });
-					
+	
 					if (i < chain.length - 1) {
 						svgArrows.push({ x: x + width / 2, y1: y + height, y2: y + height + gapY - arrowOffset, isOld: true });
 						y += height + gapY;
@@ -235,40 +259,34 @@
 				}
 				x += width + gapX;
 			}
-			
-			// Добавляем метку для old если нужно
+	
 			if (showLabels) {
-				svgLabels.push({
-					x: gapX,
-					y: gapY + 20,
-					text: 'OLD',
-					isOld: true
-				});
+				svgLabels.push({ x: gapX, y: gapY + 20, text: 'OLD', isOld: true });
 			}
-			
-			// Вычисляем стартовую позицию для новых buckets
+	
 			newStartY = oldMaxY + gapY * 2;
 		}
-		
-		// Затем рисуем обычные buckets снизу
+	
+		// --- Рисуем newBuckets ---
 		if (hasNewChains) {
-			x = gapX; // начинаем с той же позиции X
-			
+			x = gapX;
 			for (let idx = 0; idx < chains.length; idx++) {
 				const chain = chains[idx];
 				if (!chain || chain.length === 0) continue;
-				
+	
 				const width = chainWidths[idx] || 260;
 				let y = newStartY;
-				
+	
 				for (let i = 0; i < chain.length; i++) {
 					const b = chain[i];
 					if (!b) continue;
+	
 					const keys = (b.keys && Array.isArray(b.keys)) ? b.keys : [];
 					const values = (b.values && Array.isArray(b.values)) ? b.values : [];
-					const height = tophashHeight + keys.length * rowHeight + values.length * rowHeight + rowHeight + padding * 2;
+					const height = bucketHeaderHeight + tophashHeight + keys.length * rowHeight + values.length * rowHeight + rowHeight + padding * 2;
+	
 					svgBuckets.push({ id: b.id, x, y, width, height, bucket: b, padding, isOld: false });
-					
+	
 					if (i < chain.length - 1) {
 						svgArrows.push({ x: x + width / 2, y1: y + height, y2: y + height + gapY - arrowOffset, isOld: false });
 						y += height + gapY;
@@ -279,18 +297,12 @@
 				}
 				x += width + gapX;
 			}
-			
-			// Добавляем метку для new если нужно
+	
 			if (showLabels) {
-				svgLabels.push({
-					x: gapX,
-					y: newStartY - gapY + 20,
-					text: 'NEW',
-					isOld: false
-				});
+				svgLabels.push({ x: gapX, y: newStartY - gapY + 20, text: 'NEW', isOld: false });
 			}
 		}
-		
+	
 		svgWidth = x + 200;
 		svgHeight = Math.max(oldMaxY, newMaxY) + 200;
 	}
@@ -461,24 +473,35 @@
 							ry={bucketRadius}
 							filter="url(#bucket-shadow)"
 						/>
+						{#if b.bucket?.type === 'main'}
+							<text
+								x={b.padding}
+								y={b.padding + 12}
+								font-size="11"
+								font-weight="bold"
+								fill="#495057"
+							>
+								bid {b.bucket.displayBid}
+							</text>
+						{/if}
 						{#each (b.bucket?.tophash || []) as t, i}
-							<rect x={b.padding + i * fixedTophashCellWidth} y={b.padding} width={fixedTophashCellWidth} height={tophashHeight} fill="#eee" stroke="#000" />
-							<text x={b.padding + i * fixedTophashCellWidth + fixedTophashCellWidth / 2} y={b.padding + tophashHeight / 1.5} font-size="12" text-anchor="middle">{t}</text>
+							<rect x={b.padding + i * fixedTophashCellWidth} y={b.padding + bucketHeaderHeight} width={fixedTophashCellWidth} height={tophashHeight} fill="#eee" stroke="#000" />
+							<text x={b.padding + i * fixedTophashCellWidth + fixedTophashCellWidth / 2} y={b.padding + bucketHeaderHeight + tophashHeight / 1.5} font-size="12" text-anchor="middle">{t}</text>
 						{/each}
 						{#each (b.bucket?.keys || []) as k, i}
-							<rect x={b.padding} y={b.padding + tophashHeight + i * rowHeight} width={b.width - padding * 2} height={rowHeight} fill={k == null ? '#dbfdc9' : '#b2f2bb'} stroke="#12b886" class="cell-key" />
-							<text x={b.padding + 6} y={b.padding + tophashHeight + i * rowHeight + rowHeight / 1.5} font-size="13">{k ?? ''}</text>
+							<rect x={b.padding} y={b.padding + bucketHeaderHeight + tophashHeight + i * rowHeight} width={b.width - padding * 2} height={rowHeight} fill={k == null ? '#dbfdc9' : '#b2f2bb'} stroke="#12b886" class="cell-key" />
+							<text x={b.padding + 6} y={b.padding + bucketHeaderHeight + tophashHeight + i * rowHeight + rowHeight / 1.5} font-size="13">{k ?? ''}</text>
 						{/each}
 						{#each (b.bucket?.values || []) as v, i}
 							{@const keysLen = (b.bucket?.keys || []).length}
-							<rect x={b.padding} y={b.padding + tophashHeight + keysLen * rowHeight + i * rowHeight} width={b.width - padding * 2} height={rowHeight} fill={v == null ? '#fff2b8' : '#ffec99'} stroke="#ffa94d" class="cell-value" />
-							<text x={b.padding + 6} y={b.padding + tophashHeight + keysLen * rowHeight + i * rowHeight + rowHeight / 1.5} font-size="13">{v ?? ''}</text>
+							<rect x={b.padding} y={b.padding + bucketHeaderHeight + tophashHeight + keysLen * rowHeight + i * rowHeight} width={b.width - padding * 2} height={rowHeight} fill={v == null ? '#fff2b8' : '#ffec99'} stroke="#ffa94d" class="cell-value" />
+							<text x={b.padding + 6} y={b.padding + bucketHeaderHeight + tophashHeight + keysLen * rowHeight + i * rowHeight + rowHeight / 1.5} font-size="13">{v ?? ''}</text>
 						{/each}
 						{#if b.bucket}
 							{@const keysLen = (b.bucket.keys || []).length}
 							{@const valuesLen = (b.bucket.values || []).length}
-							<rect x={b.padding} y={b.padding + tophashHeight + keysLen * rowHeight + valuesLen * rowHeight} width={b.width - padding * 2} height={rowHeight} fill="#ddd" stroke="#000" />
-							<text x={b.padding + 6} y={b.padding + tophashHeight + keysLen * rowHeight + valuesLen * rowHeight + rowHeight / 1.5} font-size="12">{b.bucket.overflow || ''}</text>
+							<rect x={b.padding} y={b.padding + bucketHeaderHeight + tophashHeight + keysLen * rowHeight + valuesLen * rowHeight} width={b.width - padding * 2} height={rowHeight} fill="#ddd" stroke="#000" />
+							<text x={b.padding + 6} y={b.padding + bucketHeaderHeight + tophashHeight + keysLen * rowHeight + valuesLen * rowHeight + rowHeight / 1.5} font-size="12">{b.bucket.overflow || ''}</text>
 						{/if}
 					</g>
 				{/if}
@@ -510,6 +533,36 @@
 			{#each Object.entries(hmap) as [k, v]}
 				<div class="row"><span>{k}</span><b>{v}</b></div>
 			{/each}
+		{/if}
+		{#if stats}
+			<h3>stats</h3>
+		
+			<div class="row">
+				<span>Load factor</span>
+				<b>{stats.loadFactor.toFixed(2)}</b>
+			</div>
+		
+			<div class="row">
+				<span>Max chain length</span>
+				<b>{stats.maxChainLen}</b>
+			</div>
+		
+			<div class="row">
+				<span>Bucket with max chain</span>
+				<b>
+					{stats.maxChainBucketID >= 0 ? stats.maxChainBucketID : '—'}
+				</b>
+			</div>
+		
+			<div class="row">
+				<span>Chains count</span>
+				<b>{stats.numChains}</b>
+			</div>
+		
+			<div class="row">
+				<span>Empty buckets</span>
+				<b>{stats.numEmptyBuckets}</b>
+			</div>
 		{/if}
 	</div>
 </div>

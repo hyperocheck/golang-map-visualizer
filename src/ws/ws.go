@@ -3,38 +3,25 @@ package ws
 import (
 	"net/http"
 	"sync"
-	"log"
 
 	"github.com/gorilla/websocket"
 )
 
-/*
-	Hub хранит ВСЕ websocket-клиенты
-*/
 type Hub struct {
 	mu    sync.Mutex
 	conns map[*websocket.Conn]bool
 }
 
-/*
-	Единственный hub на всё приложение
-*/
 var hub = &Hub{
 	conns: make(map[*websocket.Conn]bool),
 }
 
-/*
-	WebSocket upgrader
-*/
 var upgrader = websocket.Upgrader{
 	CheckOrigin: func(r *http.Request) bool {
-		return true // dev
+		return true 
 	},
 }
 
-/*
-	HTTP handler для /ws
-*/
 func Handler(w http.ResponseWriter, r *http.Request) {
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
@@ -44,7 +31,6 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 	hub.add(conn)
 
 	for {
-		// читаем, чтобы ловить disconnect
 		if _, _, err := conn.ReadMessage(); err != nil {
 			hub.remove(conn)
 			return
@@ -52,18 +38,9 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-/*
-	ПУБЛИЧНАЯ функция
-	Вызывается ИЗ ЛЮБОГО ПАКЕТА
-*/
 func NotifyUpdate() {
-	log.Println("[ws] notify update")
 	hub.broadcast([]byte("update"))
 }
-
-/*
-	----- приватная логика ниже -----
-*/
 
 func (h *Hub) add(c *websocket.Conn) {
 	h.mu.Lock()

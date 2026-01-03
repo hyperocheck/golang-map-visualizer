@@ -75,7 +75,8 @@ func FromString(x *usermap.ComplexStructExample, input string) error {
 /* --------------------------------------------- */
 
 func StartConsole[K comparable, V any](m map[K]V) {
-	time.Sleep(150 * time.Millisecond)
+	time.Sleep(200 * time.Millisecond)
+
 	green.Println("Команды: show, hmap, delete <key>, update <key> <value>, insert <key> <value>, exit")
 	scanner := bufio.NewScanner(os.Stdin)
 
