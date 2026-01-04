@@ -37,4 +37,4 @@ Command |	Description
 `update <k> <v>` | guess
 `delete <k>` | guess
 ## Easter eggs 😺
-If you want to visualize a chain of blocks with a length of at least two, then use this formula to generate a certain number of items in a bucket: `(x^2) * 0.8125`, x is the number of buckets (any power of two). It will work on the 10th or 20th attempt, good luck:)
+If you want to visualize a chain of blocks with a length of at least two, then use this formula to generate a certain number of items in a bucket: `(x * 8) * 0.8125`, x is the number of buckets (any number that is a power of two (min 8) -- 8, 16, 32, 64 ...). It will work on the 10th or 20th attempt, good luck:)
