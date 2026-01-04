@@ -1,3 +1,7 @@
+
+<div align="center">
+  <h1>Golang hashmap inspector</h1>
+</div>
 <p align="center">
 	<img src="https://github.com/user-attachments/assets/6152ca31-f285-4cdc-ba73-d53078d85cd3" width="40%"/>
 </p>
