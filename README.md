@@ -1,7 +1,5 @@
 
-<div align="center">
   <h2>Golang hashmap inspector</h2>
-</div>
 <p align="center">
 	<img src="https://github.com/user-attachments/assets/6152ca31-f285-4cdc-ba73-d53078d85cd3" width="45%"/>
 </p>
