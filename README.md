@@ -32,7 +32,7 @@ Command |	Description
 --- | --- 
 `show` | print map
 `hmap` | print hmap structure
-`exit` | exit fro console & server down
+`exit` | exit from console & server down
 `insert <k> <v>` | guess
 `update <k> <v>` | guess
 `delete <k>` | guess
