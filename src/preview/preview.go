@@ -2,10 +2,10 @@ package preview
 
 import (
 	"fmt"
-	"strings"
-	"math/rand"
-	"time"
 	"github.com/fatih/color"
+	"math/rand"
+	"strings"
+	"time"
 )
 
 var preview2 = `
@@ -30,7 +30,7 @@ func Preview() {
 	lines := strings.Split(strings.TrimRight(preview2, "\n"), "\n")
 
 	start := randomSoftColor()
-	end   := randomSoftColor()
+	end := randomSoftColor()
 
 	steps := len(lines) - 1
 	if steps <= 0 {
@@ -52,9 +52,8 @@ func SimplePreview() {
 
 func randomSoftColor() [3]int {
 	return [3]int{
-		rand.Intn(120) + 80,  // R: 80–200
-		rand.Intn(120) + 80,  // G: 80–200
-		rand.Intn(120) + 80,  // B: 80–200
+		rand.Intn(120) + 80, // R: 80–200
+		rand.Intn(120) + 80, // G: 80–200
+		rand.Intn(120) + 80, // B: 80–200
 	}
 }
-

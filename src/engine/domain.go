@@ -1,18 +1,21 @@
 package engine
 
 import "unsafe"
+import "encoding/json"
 
 type BucketStats struct {
-	LoadFactor          float64 `json:"loadFactor"`
-	MaxChainLen         int     `json:"maxChainLen"`
-	MaxChainBucketID    int     `json:"maxChainBucketID"`
-	NumChains           int     `json:"numChains"`
-	NumEmptyBuckets     int     `json:"numEmptyBuckets"`
+	LoadFactor       float64 `json:"loadFactor"`
+	MaxChainLen      int     `json:"maxChainLen"`
+	MaxChainBucketID int     `json:"maxChainBucketID"`
+	NumChains        int     `json:"numChains"`
+	NumEmptyBuckets  int     `json:"numEmptyBuckets"`
+	KeyType          string  `json:"keytype"`
+	ValueType        string  `json:"valuetype"`
 }
 
-type VizualResponse[K comparable, V any] struct {
-	Buckets []bucketJSON[K,V] `json:"buckets"`
-	Stats   BucketStats       `json:"stats"`
+type VizualResponse struct {
+	Buckets []bucketJSON `json:"buckets"`
+	Stats   BucketStats  `json:"stats"`
 }
 
 type Hmap struct {
@@ -28,17 +31,17 @@ type Hmap struct {
 }
 
 type hmapJSON struct {
-	Count      int           `json:"count"`
-	Flags      uint8         `json:"flags"`
-	B          uint8         `json:"B"`
-	NumBuckets int           `json:"numBuckets"`
-	NOverflow  uint16        `json:"noverflow"`
-	Hash0      uint32        `json:"hash0"`
-	Buckets    string        `json:"buckets"`
-	OldBuckets string        `json:"oldbuckets"`
-	NEvacuate  uintptr       `json:"nevacuate"`
-	Extra      *mapextraJSON `json:"extra,omitempty"`
-	IsGrowing  bool          `json:"isgrowing"`
+	Count      int      `json:"count"`
+	Flags      uint8    `json:"flags"`
+	B          uint8    `json:"B"`
+	NumBuckets int      `json:"numBuckets"`
+	NOverflow  uint16   `json:"noverflow"`
+	Hash0      uint32   `json:"hash0"`
+	Buckets    string   `json:"buckets"`
+	OldBuckets string   `json:"oldbuckets"`
+	NEvacuate  uintptr  `json:"nevacuate"`
+	Extra      []string `json:"extra,omitempty"`
+	IsGrowing  bool     `json:"isgrowing"`
 }
 
 // только для мап у которых и key и value типы не ссылочные
@@ -71,11 +74,11 @@ type _bucket_[K comparable, V any] struct {
 	overflow unsafe.Pointer
 }
 
-type bucketJSON[K comparable, V any] struct {
-	Tophash  [8]uint8 `json:"tophash"`
-	Keys     [8]*K    `json:"keys,omitempty"`
-	Values   [8]*V    `json:"values,omitempty"`
-	Overflow string   `json:"overflow"` // просто для визуализации адреса типа 0x......
+type bucketJSON struct {
+	Tophash  [8]uint8           `json:"tophash"`
+	Keys     [8]json.RawMessage `json:"keys,omitempty"`
+	Values   [8]json.RawMessage `json:"values,omitempty"`
+	Overflow string             `json:"overflow"` // просто для визуализации адреса типа 0x......
 
 	Type string `json:"type"` // main || overflow
 	ID   int    `json:"id"`   // просто на всякий случай, может на фронте это будет нужно

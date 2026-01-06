@@ -1,6 +1,22 @@
 <script>
 	import { onMount } from 'svelte';
 
+	import JSONTree from 'svelte-json-tree';
+	let selectedBucket = null;
+	function formatPreview(val) {
+	    if (val === null || val === undefined) return '';
+	    if (typeof val === 'object') {
+	        const str = JSON.stringify(val);
+	        return str.length > 15 ? str.slice(0, 12) + '...' : str;
+	    }
+	    return val.toString();
+	}
+	function withZeroValues(arr) {
+	    if (!Array.isArray(arr)) return arr;
+
+		return arr.map(v => v == null ? "ZeroValue" : v);
+	}
+
 	let socket = null;
 	let stats = null;
 	let viewBoxInitialized = false;
@@ -193,11 +209,12 @@
 					const keys = (b.keys && Array.isArray(b.keys)) ? b.keys : [];
 					const values = (b.values && Array.isArray(b.values)) ? b.values : [];
 					const maxLen = Math.max(
-						...keys.map(k => k ? k.toString().length : 0),
-						...values.map(v => v ? v.toString().length : 0),
-						b.overflow ? b.overflow.toString().length : 0,
-						0
+					    ...keys.map(k => formatPreview(k).length), // Используем форматтер
+					    ...values.map(v => formatPreview(v).length), // Используем форматтер
+					    b.overflow ? b.overflow.toString().length : 0,
+					    0
 					);
+
 					return maxLen * 8 + padding * 2;
 				});
 				maxWidth = Math.max(maxWidth, ...widths, fixedTophashWidth);
@@ -211,10 +228,10 @@
 					const keys = (b.keys && Array.isArray(b.keys)) ? b.keys : [];
 					const values = (b.values && Array.isArray(b.values)) ? b.values : [];
 					const maxLen = Math.max(
-						...keys.map(k => k ? k.toString().length : 0),
-						...values.map(v => v ? v.toString().length : 0),
-						b.overflow ? b.overflow.toString().length : 0,
-						0
+					    ...keys.map(k => formatPreview(k).length), // Используем форматтер
+					    ...values.map(v => formatPreview(v).length), // Используем форматтер
+					    b.overflow ? b.overflow.toString().length : 0,
+					    0
 					);
 					return maxLen * 8 + padding * 2;
 				});
@@ -384,29 +401,31 @@
 		window.addEventListener('mousemove', onMouseMove);
 		window.addEventListener('mouseup', onMouseUp);
 	}
-
 	function toggleSide() {
 		const container = document.getElementById('svg-container');
 		const rect = container.getBoundingClientRect();
 		const unitsPerPixel = vb.w / rect.width;
-
+	
 		if (isSideVisible) {
 			lastSideWidth = sideWidth;
-			vb.w += sideWidth * unitsPerPixel;
 			sideWidth = 0;
 			isSideVisible = false;
 		} else {
 			sideWidth = lastSideWidth;
-			vb.w -= sideWidth * unitsPerPixel;
 			isSideVisible = true;
 		}
-		
-		setTimeout(() => {
+	
+		// ❗ Ждём следующий frame, когда DOM уже стабилен
+		requestAnimationFrame(() => {
 			const newRect = container.getBoundingClientRect();
+	
+			vb.w = unitsPerPixel * newRect.width;
 			vb.h = vb.w * (newRect.height / newRect.width);
 			vb = vb;
-		}, 0);
+		});
 	}
+
+
 
 	onMount(() => {
 		load();        // начальная загрузка
@@ -461,7 +480,12 @@
 
 			{#each svgBuckets as b (b.id)}
 				{#if b.x + b.width > vb.x && b.x < vb.x + vb.w && b.y + b.height > vb.y && b.y < vb.y + vb.h}
-					<g transform={`translate(${b.x}, ${b.y})`} class="bucket-group">
+					<g transform={
+						`translate(${b.x}, ${b.y})`} 
+						class="bucket-group" 
+						on:click={() => selectedBucket = b.bucket} 
+						style="cursor: pointer"
+					>
 						<rect 
 							class="bucket-rect {b.isOld ? 'bucket-old' : ''}" 
 							width={b.width} 
@@ -490,12 +514,18 @@
 						{/each}
 						{#each (b.bucket?.keys || []) as k, i}
 							<rect x={b.padding} y={b.padding + bucketHeaderHeight + tophashHeight + i * rowHeight} width={b.width - padding * 2} height={rowHeight} fill={k == null ? '#dbfdc9' : '#b2f2bb'} stroke="#12b886" class="cell-key" />
-							<text x={b.padding + 6} y={b.padding + bucketHeaderHeight + tophashHeight + i * rowHeight + rowHeight / 1.5} font-size="13">{k ?? ''}</text>
+							<text x={b.padding + 6} y={b.padding + bucketHeaderHeight + tophashHeight + i * rowHeight + rowHeight / 1.5} font-size="13">
+							<title>{JSON.stringify(k)}</title> <!-- Тултип с полным JSON при наведении -->
+								{formatPreview(k)} <!-- Используем форматтер вместо k ?? '' -->
+							</text>
 						{/each}
 						{#each (b.bucket?.values || []) as v, i}
 							{@const keysLen = (b.bucket?.keys || []).length}
-							<rect x={b.padding} y={b.padding + bucketHeaderHeight + tophashHeight + keysLen * rowHeight + i * rowHeight} width={b.width - padding * 2} height={rowHeight} fill={v == null ? '#fff2b8' : '#ffec99'} stroke="#ffa94d" class="cell-value" />
-							<text x={b.padding + 6} y={b.padding + bucketHeaderHeight + tophashHeight + keysLen * rowHeight + i * rowHeight + rowHeight / 1.5} font-size="13">{v ?? ''}</text>
+						    <rect x={b.padding} y={b.padding + bucketHeaderHeight + tophashHeight + keysLen * rowHeight + i * rowHeight} width={b.width - padding * 2} height={rowHeight} fill={v == null ? '#fff2b8' : '#ffec99'} stroke="#ffa94d" class="cell-value" />
+							<text x={b.padding + 6} y={b.padding + bucketHeaderHeight + tophashHeight + keysLen * rowHeight + i * rowHeight + rowHeight / 1.5} font-size="13">
+							<title>{JSON.stringify(v)}</title> <!-- Тултип с полным JSON -->
+								{formatPreview(v)} <!-- Используем форматтер вместо v ?? '' -->
+							</text>
 						{/each}
 						{#if b.bucket}
 							{@const keysLen = (b.bucket.keys || []).length}
@@ -563,7 +593,47 @@
 				<span>Empty buckets</span>
 				<b>{stats.numEmptyBuckets}</b>
 			</div>
+
+			<div class="row">
+				<span>Key type</span>
+				<b>{stats.keytype}</b>
+			</div>
+
+			<div class="row">
+				<span>Value type</span>
+				<b>{stats.valuetype}</b>
+			</div>
 		{/if}
+	
+		<!-- НОВАЯ СЕКЦИЯ: ИНСПЕКТОР БАКЕТА -->
+    <div class="inspector-section" style="margin-top: 20px; border-top: 2px solid #ccc; padding-top: 10px;">
+        <h3>inspector</h3>
+        {#if selectedBucket}
+            <div style="margin-bottom: 10px; color: #555;">
+                <small>({selectedBucket.type})</small>
+            </div>
+            
+            <div class="tree-label">Keys:</div>
+            <div class="tree-container">
+				<JSONTree value={withZeroValues(selectedBucket.keys)} />
+            </div>
+
+            <div class="tree-label" style="margin-top: 10px;">Values:</div>
+            <div class="tree-container">
+				<JSONTree value={withZeroValues(selectedBucket.values)} />
+            </div>
+            
+            <div class="row" style="margin-top: 10px; font-size: 11px;">
+                <span>Overflow</span>
+                <code>{selectedBucket.overflow}</code>
+            </div>
+        {:else}
+            <p style="color: #999; font-size: 12px; font-style: italic; text-align: center;">
+                Кликните на бакет для анализа
+            </p>
+        {/if}
+    </div>
+
 	</div>
 </div>
 
@@ -636,5 +706,20 @@
 	.label-new { fill: #51cf66; }
 	.cell-key:hover { fill: #9feaa4; }
 	.cell-value:hover { fill: #ffe066; }
+	
+	/* СТИЛИ ДЛЯ ДЕРЕВА JSON */
+    .tree-label { font-size: 11px; font-weight: bold; color: #666; text-transform: uppercase; margin-bottom: 4px; }
+    .tree-container { 
+        background: #fff; 
+        border: 1px solid #eee; 
+        border-radius: 4px; 
+        padding: 4px; 
+        max-height: 250px; 
+        overflow: auto; 
+    }
+    code { background: #eee; padding: 1px 4px; border-radius: 3px; }
+
+    /* Подсветка выбранного бакета в SVG */
+    :global(.bucket-group) { cursor: pointer; }
 </style>
 
