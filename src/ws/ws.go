@@ -18,7 +18,7 @@ var hub = &Hub{
 
 var upgrader = websocket.Upgrader{
 	CheckOrigin: func(r *http.Request) bool {
-		return true 
+		return true
 	},
 }
 
@@ -66,4 +66,3 @@ func (h *Hub) broadcast(msg []byte) {
 		}
 	}
 }
-

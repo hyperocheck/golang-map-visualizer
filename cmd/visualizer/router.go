@@ -1,16 +1,16 @@
 package main
 
 import (
+	"context"
+	"log"
 	"net/http"
 	"os"
 	"os/signal"
-	"context"
 	"syscall"
-	"log"
 	"time"
 
-	"visualizer/src/ws"
 	"visualizer/src/engine"
+	"visualizer/src/ws"
 
 	"github.com/fatih/color"
 )
@@ -31,7 +31,7 @@ func startServer[K comparable, V any](t *engine.Type[K, V], port string) error {
 
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
-	
+
 	green := color.New(color.FgGreen)
 	magenta := color.New(color.FgMagenta)
 
@@ -41,7 +41,7 @@ func startServer[K comparable, V any](t *engine.Type[K, V], port string) error {
 		magenta.Printf("http://localhost%s/vizual     --> buckets JSON\n", port)
 		magenta.Printf("http://localhost%s/vizual_old --> old buckets JSON\n", port)
 		magenta.Printf("http://localhost%s/hmap       --> hmap JSON\n\n", port)
-		
+
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			log.Fatalf("listen error: %v", err)
 		}
@@ -50,7 +50,6 @@ func startServer[K comparable, V any](t *engine.Type[K, V], port string) error {
 	<-stop
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
-	
+
 	return srv.Shutdown(ctx)
 }
-

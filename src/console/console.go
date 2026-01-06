@@ -8,8 +8,8 @@ import (
 	"strings"
 	"time"
 
-	"visualizer/src/ws"
 	"visualizer/src/engine"
+	"visualizer/src/ws"
 
 	"github.com/fatih/color"
 )
@@ -53,7 +53,9 @@ func StartConsole[K comparable, V any](t *engine.Type[K, V]) {
 			l := len(t.Data)
 			if l > 100 {
 				yellow.Printf("Больше 100 элементов. Уверен?(y/n)")
-				if !scanner.Scan() {break}
+				if !scanner.Scan() {
+					break
+				}
 				ans := scanner.Text()
 				switch ans {
 				case "y", "yes", "Y", "н", "Н":
@@ -89,7 +91,7 @@ func StartConsole[K comparable, V any](t *engine.Type[K, V]) {
 				continue
 			}
 			t.Data[key] = value
-			
+
 			green.Println("Inserted element successfully")
 
 			ws.NotifyUpdate()
@@ -144,7 +146,7 @@ func parseStringToType[T any](s string) (T, error) {
 	var zero T
 
 	switch any(zero).(type) {
-	
+
 	case string:
 		return any(s).(T), nil
 	case int:
@@ -190,4 +192,3 @@ func parseStringToType[T any](s string) (T, error) {
 		return zero, fmt.Errorf("unsupported type")
 	}
 }
-
