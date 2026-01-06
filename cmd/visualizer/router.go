@@ -9,35 +9,18 @@ import (
 	"log"
 	"time"
 
-	"visualizer/src/hmap"
 	"visualizer/src/ws"
+	"visualizer/src/engine"
 
 	"github.com/fatih/color"
 )
 
-func vizual(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
-	jsonBytes := hmap.GetBucketsJSON(m, "buckets")
-	w.Write(jsonBytes)
-}
+func startServer[K comparable, V any](t *engine.Type[K, V], port string) error {
 
-func vizual_old(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
-	jsonBytes := hmap.GetBucketsJSON(m, "oldbuckets")
-	w.Write(jsonBytes)
-}
-
-func vizual_hmap(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
-	res, _ := hmap.GetHmapJSON(hmap.GetHmap(m))
-	w.Write(res)
-}
-
-func startServer(port string) error {
 	mux := http.NewServeMux()
-	mux.HandleFunc("/vizual", vizual)
-	mux.HandleFunc("/vizual_old", vizual_old)
-	mux.HandleFunc("/hmap", vizual_hmap)
+	mux.HandleFunc("/vizual", t.VisualHandler)
+	mux.HandleFunc("/vizual_old", t.VisualOldHandler)
+	mux.HandleFunc("/hmap", t.HmapHandler)
 	mux.Handle("/", http.FileServer(http.Dir("frontend/dist")))
 	mux.HandleFunc("/ws", ws.Handler)
 

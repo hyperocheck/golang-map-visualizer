@@ -1,63 +1,37 @@
-package hmap
+package engine
 
 import (
-	"unsafe"
-	"reflect"
-	"encoding/json"
+	"flag"
 	"fmt"
+	"log"
+	"unsafe"
+	"encoding/json"
+	"reflect"
 
 	"github.com/fatih/color"
 )
 
-type BucketStats struct {
-	LoadFactor          float64 `json:"loadFactor"`
-	MaxChainLen         int     `json:"maxChainLen"`
-	MaxChainBucketID    int     `json:"maxChainBucketID"`
-	NumChains           int     `json:"numChains"`
-	NumEmptyBuckets     int     `json:"numEmptyBuckets"`
+type Type[K comparable, V any] struct {
+	Data map[K]V
 }
 
-type VizualResponse[K comparable, V any] struct {
-	Buckets []bucketJSON[K,V] `json:"buckets"`
-	Stats   BucketStats       `json:"stats"`
+func Start[K comparable, V any](factory func(iters int, maxChain bool) map[K]V) *Type[K, V] {
+	iters := flag.Int("range", 0, "range")
+	maxChain := flag.Bool("max-chain", false, "hz cho eto budet potom pridumayou")
+
+	flag.Parse()
+
+	userMap := factory(*iters, *maxChain)
+
+	return &Type[K, V]{
+		Data: userMap,
+	}
 }
 
-// Про вычисление loadFactor 
-// из оригинального кода значем, что он составляет 6.5 
-// максимальный loadFactor = 8.0, потому что больше получить невозможно:
-//   buckets_count  |  (максимальное количество элементов в этих бакетах) | loadFactor (количество элементов / количество бакетов) 
-//       1          |                     1*8                             |                  8/1     = 8
-//       2          |                     2*8                             |                  16/2    = 8
-//       4          |                     4*8                             |                  32/4    = 8
-//       8          |                     8*8                             |                  64/8    = 8
-//       16         |                     16*8                            |                  128/16  = 8
-//       32         |                     32*8                            |                  256/32  = 8
+func (t *Type[K, V]) GetBucketsJSON(bucketsType string) []byte {
+	h := (**Hmap)(unsafe.Pointer(&t.Data))
 
-// то есть для нас 100% заполнености это 8.0 -> 6.5 это 81.25% заполнености
-// из оригинального кода:
-
-/*
-func overLoadFactor(count int, B uint8) bool {
-	return count > abi.MapBucketCount && uintptr(count) > loadFactorNum*(bucketShift(B)/loadFactorDen)
-}
-loadFactorNum это куча констант (loadFactorDen * abi.MapBucketCount * 13 / 16 = 2 * 1 << MapBucketCountBits * 13 / 16) = (2 * 1 << 3 * 13 / 16) = 13
-итого: 13 * (1 << B)/2
-*/
-
-// для примера, пусть B = 2 -> бакетов всего 4, сколько элементов уместится до эвакуации?
-// можно подумать, что (4 * 8) * 0.65 ~ 20 элементов, НО так делать неправильно, ведь max loadFactor = 8, а не 10 
-// следовательно правильно будет (4*8) * 0.8125 = 26, если количество элементов больше этого числа -> evacuate
-// проверим через формулу выше: 13 * (1 << 2)/2 = 26
-// чтобы вычислить текущий loadFactor len(map)/(1 << B)
-
-// 😎✔️ совет! Если хочешь словить цепочку оверфлоу бакетов длиной больше 1, заполняй мапу примерно до (x * 8) * 0.8125, где x количсетво бакетов
-// (любое число, которое является степерью двойки (min 8) -- 8, 16, 32, 64 ....)
-// *с поппытки 10-20 получится:))))))
-
-func GetBucketsJSON[K comparable, V any](m map[K]V, _type_ string) []byte {
-	h := (**Hmap)(unsafe.Pointer(&m))
-
-	if _type_ == "oldbuckets" && (*h).oldbuckets == nil {
+	if bucketsType == "oldbuckets" && (*h).oldbuckets == nil {
 		return []byte("[]")
 	}
 
@@ -65,12 +39,12 @@ func GetBucketsJSON[K comparable, V any](m map[K]V, _type_ string) []byte {
 		return []byte("[]")
 	}
 
-	bucketSize := inspectMap(m)
+	bucketSize := inspectMap(t.Data)
 	
 	var bucketNum uintptr
 	var b unsafe.Pointer
 	
-	if _type_ == "oldbuckets" {
+	if bucketsType == "oldbuckets" {
 		b = (*h).oldbuckets
 		if b == nil {
 			return []byte("[]")
@@ -152,7 +126,7 @@ func GetBucketsJSON[K comparable, V any](m map[K]V, _type_ string) []byte {
 	resp :=  VizualResponse[K, V] {
 		Buckets: allBuckets,
 		Stats: BucketStats {
-			LoadFactor: float64(len(m))/float64(int(1) << (*h).B),  
+			LoadFactor: float64(len(t.Data))/float64(int(1) << (*h).B),  
 			MaxChainLen: maxOverflowChainLen,   
 			MaxChainBucketID: bucketIDMaxOverflowChainLen, 
 			NumChains: chainsNum, 
@@ -237,7 +211,7 @@ func GetHmapJSON(h *Hmap) ([]byte, error) {
 
 		jsonH.Extra = &extraJSON
 	}
-
+	
 	// return json.MarshalIndent(jsonH, "", "  ")
 	return json.Marshal(jsonH)
 }
@@ -256,19 +230,18 @@ func inspectMap[K comparable, V any](m map[K]V) uintptr {
 	return bucketSize 
 }
 
-func GetHmap[K comparable, V any](m map[K]V) *Hmap {
-	if m == nil {
+func(t *Type[K,V]) GetHmap() *Hmap {
+	if t.Data == nil {
 		return nil
 	}
-	return *(**Hmap)(unsafe.Pointer(&m))
+	return *(**Hmap)(unsafe.Pointer(&t.Data))
 }
 
-/*
-func Generate[K comparable, V any](m map[K]V) {
+func(t *Type[K, V]) Generate() {
 
-	h := (**Hmap)(unsafe.Pointer(&m))
+	h := (**Hmap)(unsafe.Pointer(&t.Data))
 		
-	bucketSize := inspectMap(m)
+	bucketSize := inspectMap(t.Data)
 
 	cmax := 0
 	mstr := ""
@@ -292,13 +265,15 @@ func Generate[K comparable, V any](m map[K]V) {
 			mstr = maxstr
 		}
 	}
-	fmt.Println("COUNT: ", cmax)
-	fmt.Println(mstr)
+	
+	log.Println("max_chain_lenght: ", cmax)
+	log.Println("max_chain: ", mstr)
 }
-*/
 
+func(t *Type[K, V]) PrintHmap() {
+	
+	h := t.GetHmap()
 
-func PrintHmap(h *Hmap) {
 	lines := []string{
 		"Hmap {",
 		fmt.Sprintf("  count       %v", h.count),
@@ -352,6 +327,8 @@ func printHmap(h *Hmap) {
 		)
 	color.Magenta("\n}")
 }
+
+
 
 
 

@@ -8,13 +8,8 @@ import (
 	"strings"
 	"time"
 
-	"visualizer/src/hmap"
 	"visualizer/src/ws"
-
-	/* ------------------ */
-	// для примера
-	"visualizer/src/usermap"
-	/* ------------------ */
+	"visualizer/src/engine"
 
 	"github.com/fatih/color"
 )
@@ -25,56 +20,7 @@ var (
 	green  = color.New(color.FgGreen)
 )
 
-/* --------------------------------------------- */
-// пример реализации сложной структуры, которая передается
-// в качестве значения мапы
-// испортируется из usermap
-
-/*
-type ComplexStructExmaple struct {
-	i []int 
-	ui uint32 
-	a atomic.Bool
-}
-
-на вход подается как:
-1,43,132,4,1,23,321;899;false
-/* --------------------------------------------- */
-
-func FromString(x *usermap.ComplexStructExample, input string) error {
-	parts := strings.Split(input, ";")
-	if len(parts) != 3 {
-		return fmt.Errorf("expected 3 parts: i,ui,a")
-	}
-
-	intParts := strings.Split(parts[0], ",")
-	x.I = make([]int, len(intParts))
-	for idx, p := range intParts {
-		v, err := strconv.Atoi(p)
-		if err != nil {
-			return fmt.Errorf("invalid int in slice: %v", err)
-		}
-		x.I[idx] = v
-	}
-
-	ui64, err := strconv.ParseUint(parts[1], 10, 32)
-	if err != nil {
-		return fmt.Errorf("invalid uint32: %v", err)
-	}
-	x.UI = uint32(ui64)
-
-	b, err := strconv.ParseBool(parts[2])
-	if err != nil {
-		return fmt.Errorf("invalid bool: %v", err)
-	}
-	x.A.Store(b)
-
-	return nil
-}
-
-/* --------------------------------------------- */
-
-func StartConsole[K comparable, V any](m map[K]V) {
+func StartConsole[K comparable, V any](t *engine.Type[K, V]) {
 	time.Sleep(200 * time.Millisecond)
 
 	green.Println("Команды: show, hmap, delete <key>, update <key> <value>, insert <key> <value>, exit")
@@ -102,16 +48,16 @@ func StartConsole[K comparable, V any](m map[K]V) {
 		case "exit":
 			return
 		case "hmap":
-			hmap.PrintHmap(hmap.GetHmap(m))
+			t.PrintHmap()
 		case "show":
-			l := len(m)
+			l := len(t.Data)
 			if l > 100 {
 				yellow.Printf("Больше 100 элементов. Уверен?(y/n)")
 				if !scanner.Scan() {break}
 				ans := scanner.Text()
 				switch ans {
 				case "y", "yes", "Y", "н", "Н":
-					for k, v := range m {
+					for k, v := range t.Data {
 						fmt.Printf("%v : %v\n", k, v)
 					}
 					continue
@@ -119,7 +65,7 @@ func StartConsole[K comparable, V any](m map[K]V) {
 					continue
 				}
 			}
-			for k, v := range m {
+			for k, v := range t.Data {
 				fmt.Printf("%v : %v\n", k, v)
 			}
 
@@ -133,7 +79,7 @@ func StartConsole[K comparable, V any](m map[K]V) {
 				red.Println("Invalid key:", err)
 				continue
 			}
-			if _, ok := m[key]; ok {
+			if _, ok := t.Data[key]; ok {
 				red.Println("Key already exists")
 				continue
 			}
@@ -142,7 +88,7 @@ func StartConsole[K comparable, V any](m map[K]V) {
 				red.Println("Invalid value:", err)
 				continue
 			}
-			m[key] = value
+			t.Data[key] = value
 			
 			green.Println("Inserted element successfully")
 
@@ -157,7 +103,7 @@ func StartConsole[K comparable, V any](m map[K]V) {
 				red.Println("Invalid key:", err)
 				continue
 			}
-			if _, ok := m[key]; !ok {
+			if _, ok := t.Data[key]; !ok {
 				red.Println("Key does not exist")
 				continue
 			}
@@ -166,7 +112,7 @@ func StartConsole[K comparable, V any](m map[K]V) {
 				red.Println("Invalid value:", err)
 				continue
 			}
-			m[key] = value
+			t.Data[key] = value
 			green.Println("Updated element successfully")
 
 			ws.NotifyUpdate()
@@ -180,11 +126,11 @@ func StartConsole[K comparable, V any](m map[K]V) {
 				red.Println("Invalid key:", err)
 				continue
 			}
-			if _, ok := m[key]; !ok {
+			if _, ok := t.Data[key]; !ok {
 				red.Println("Key does not exist")
 				continue
 			}
-			delete(m, key)
+			delete(t.Data, key)
 			green.Println("Deleted element successfully")
 
 			ws.NotifyUpdate()
@@ -198,10 +144,7 @@ func parseStringToType[T any](s string) (T, error) {
 	var zero T
 
 	switch any(zero).(type) {
-	case usermap.ComplexStructExample:
-		u := usermap.ComplexStructExample{}
-		err := FromString(&u, s)
-		return any(u).(T), err	
+	
 	case string:
 		return any(s).(T), nil
 	case int:

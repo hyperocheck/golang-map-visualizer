@@ -1,6 +1,19 @@
-package hmap
+package engine
 
 import "unsafe"
+
+type BucketStats struct {
+	LoadFactor          float64 `json:"loadFactor"`
+	MaxChainLen         int     `json:"maxChainLen"`
+	MaxChainBucketID    int     `json:"maxChainBucketID"`
+	NumChains           int     `json:"numChains"`
+	NumEmptyBuckets     int     `json:"numEmptyBuckets"`
+}
+
+type VizualResponse[K comparable, V any] struct {
+	Buckets []bucketJSON[K,V] `json:"buckets"`
+	Stats   BucketStats       `json:"stats"`
+}
 
 type Hmap struct {
 	count      int

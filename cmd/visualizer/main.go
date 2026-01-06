@@ -1,30 +1,39 @@
 package main
 
 import (
-	"visualizer/src/console"
-	"visualizer/src/hmap"
 	"visualizer/src/preview"
-	"visualizer/src/usermap"
+	"visualizer/src/engine"
+	"visualizer/src/console"
 
 	"log"
 	"syscall"
 	"fmt"
 )
-
-var (
-	m = usermap.GetUserMap()
-)
-
+ 
 func main() {
 	preview.Preview()
 	
+	type MyCustomData struct {
+		ID    int
+		Label string
+		Valid bool
+	}
+	usermapo := engine.Start(func(iters int, maxChain bool) map[int]string {
+
+		m := make(map[int]string)
+		
+		for i := range 100 {m[i] = fmt.Sprintf("%d", i) + " string"}
+		
+		return m
+	})
+
 	go func() {
-		hmap.PrintHmap(hmap.GetHmap(m))
-		console.StartConsole(m)
+		usermapo.PrintHmap()
+		console.StartConsole(usermapo)
 		syscall.Kill(syscall.Getpid(), syscall.SIGTERM)
 	}()
 	
-	if err := startServer(":8080"); err != nil {
+	if err := startServer(usermapo, ":8080"); err != nil {
 		log.Printf("graceful shutdown error: %v", err)
 	}
 	fmt.Println("\nGoodbye!😺")
