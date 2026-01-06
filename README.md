@@ -10,7 +10,7 @@
 
 ## 🥀ToDo
 - [ ] docker img
-- [ ] Сorrect display of ANY types in the visualization
+- [x] Сorrect display of ANY types in the visualization
 - [ ] The ability to perform operations with the map directly from the visualization
 - [ ] Implement map visualization for versions >1.23💀
 - [ ] Add an endpoint with an overview of the work of the map (tutorial)
@@ -27,7 +27,7 @@ cd golang-map-visualizer
 go1.23 run ./cmd/visualizer/
 ```
 ## How to use
-The only `GetUserMap` function is in the `/src/usermap/usermap.go` file. You need to create any map in it and return it. In this function, you can do whatever you want with the map before launching, for example, fill it in and remove half of the elements. By default, any custom key and value can be inserted into the map, but in order to use the console, you need to implement a parser and constructor of this type in the `/src/console/console.go` file. This means that you need to come up with an input format for your data type and write a parser for it yourself. It's best to use basic data types (like `int`, `string`, `bool` etc), since I haven't really bothered with outputting custom structures yet :)  
+~~The only `GetUserMap` function is in the `/src/usermap/usermap.go` file. You need to create any map in it and return it. In this function, you can do whatever you want with the map before launching, for example, fill it in and remove half of the elements. By default, any custom key and value can be inserted into the map, but in order to use the console, you need to implement a parser and constructor of this type in the `/src/console/console.go` file. This means that you need to come up with an input format for your data type and write a parser for it yourself. It's best to use basic data types (like `int`, `string`, `bool` etc), since I haven't really bothered with outputting custom structures yet :)~~
 You have access to the cli with the following commands:
 
 Command |	Description
