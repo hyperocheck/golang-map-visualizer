@@ -143,7 +143,6 @@ func (t *Type[K, V]) GetBucketsJSON(bucketsType string) []byte {
 	}
 
 	res, err := json.Marshal(resp)
-	log.Println(string(res))
 	if err != nil || len(res) == 0 {
 		return []byte("[]")
 	}
