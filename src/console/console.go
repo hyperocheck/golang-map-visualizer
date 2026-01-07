@@ -20,7 +20,6 @@ var (
 	green  = color.New(color.FgGreen)
 )
 
-
 func StartConsole[K comparable, V any](t *engine.Type[K, V]) {
 	time.Sleep(200 * time.Millisecond)
 
@@ -77,7 +76,7 @@ func StartConsole[K comparable, V any](t *engine.Type[K, V]) {
 				yellow.Println("Usage: insert <key> <value>")
 				continue
 			}
-			key, err := parseStringToType[K](args[1])
+			key, err := engine.ParseValue[K](args[1])
 			if err != nil {
 				red.Println("Invalid key:", err)
 				continue
@@ -86,7 +85,7 @@ func StartConsole[K comparable, V any](t *engine.Type[K, V]) {
 				red.Println("Key already exists")
 				continue
 			}
-			value, err := parseStringToType[V](strings.Join(args[2:], " "))
+			value, err := engine.ParseValue[V](strings.Join(args[2:], " "))
 			if err != nil {
 				red.Println("Invalid value:", err)
 				continue
@@ -101,7 +100,7 @@ func StartConsole[K comparable, V any](t *engine.Type[K, V]) {
 				yellow.Println("Usage: update <key> <value>")
 				continue
 			}
-			key, err := parseStringToType[K](args[1])
+			key, err := engine.ParseValue[K](args[1])
 			if err != nil {
 				red.Println("Invalid key:", err)
 				continue
@@ -110,7 +109,7 @@ func StartConsole[K comparable, V any](t *engine.Type[K, V]) {
 				red.Println("Key does not exist")
 				continue
 			}
-			value, err := parseStringToType[V](strings.Join(args[2:], " "))
+			value, err := engine.ParseValue[V](strings.Join(args[2:], " "))
 			if err != nil {
 				red.Println("Invalid value:", err)
 				continue
@@ -124,7 +123,7 @@ func StartConsole[K comparable, V any](t *engine.Type[K, V]) {
 				yellow.Println("Usage: delete <key>")
 				continue
 			}
-			key, err := parseStringToType[K](args[1])
+			key, err := engine.ParseValue[K](args[1])
 			if err != nil {
 				red.Println("Invalid key:", err)
 				continue

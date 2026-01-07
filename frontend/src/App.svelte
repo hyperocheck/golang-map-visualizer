@@ -432,14 +432,15 @@
       vb = vb
     })
   }
-  function selectKey(bucket, index) {
+  function selectKey(bucket, index, isOld) {
     if (bucket.keys[index] == null) return
     selectedBucket = bucket
     selectedKey = {
       bucket,
       index,
       key: bucket.keys[index],
-      value: bucket.values[index]
+      value: bucket.values[index],
+      isOld
     }
     // Инициализируем input как JSON.stringify, но пользователь может редактировать как raw
     newValueJson = JSON.stringify(selectedKey.value, null, 2)
@@ -636,10 +637,13 @@
                 stroke="#12b886"
                 class="cell-key {selectedKey &&
                 selectedKey.bucket.id === b.bucket.id &&
+                selectedKey.isOld === b.isOld &&
                 selectedKey.index === i
                   ? 'selected'
                   : ''}"
-                on:dblclick={k != null ? () => selectKey(b.bucket, i) : null}
+                on:dblclick={k != null
+                  ? () => selectKey(b.bucket, i, b.isOld)
+                  : null}
               />
               <text
                 x={b.padding + 6}
@@ -713,7 +717,7 @@
                 font-size="12">{b.bucket.overflow || ''}</text
               >
             {/if}
-            {#if selectedKey && selectedKey.bucket.id === b.bucket.id}
+            {#if selectedKey && selectedKey.bucket.id === b.bucket.id && selectedKey.isOld === b.isOld}
               <rect
                 x={b.padding}
                 y={b.padding +
