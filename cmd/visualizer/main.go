@@ -17,12 +17,12 @@ import (
 func main() {
 	preview.Preview()
 
-	usermapo := engine.Start(func(iters int, maxChain bool) map[int]int {
+	usermapo := engine.Start(func(iters int, maxChain bool) map[int]MyCustomData {
 
-		m := make(map[int]int)
+		m := make(map[int]MyCustomData)
 
-		for i := range 20 {
-			m[i] = i
+		for i := range 500 {
+			m[i] = GenerateMyCustomData()
 		}
 
 		return m

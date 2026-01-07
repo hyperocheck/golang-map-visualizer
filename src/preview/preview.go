@@ -8,6 +8,30 @@ import (
 	"time"
 )
 
+var preview7 = `
+▄▖             ▘          ▗     
+▌ ▛▌  ▛▛▌▀▌▛▌  ▌▛▌▛▘▛▌█▌▛▘▜▘▛▌▛▘
+▙▌▙▌  ▌▌▌█▌▙▌  ▌▌▌▄▌▙▌▙▖▙▖▐▖▙▌▌ 
+           ▌        ▌
+ 
+`
+
+var preview6 = `
+               ▘          ▗     
+▛▌▛▌  ▛▛▌▀▌▛▌  ▌▛▌▛▘▛▌█▌▛▘▜▘▛▌▛▘
+▙▌▙▌  ▌▌▌█▌▙▌  ▌▌▌▄▌▙▌▙▖▙▖▐▖▙▌▌ 
+▄▌         ▌        ▌
+ 
+`
+
+var preview5 = `
+         ▘          ▗     
+▛▛▌▀▌▛▌  ▌▛▌▛▘▛▌█▌▛▘▜▘▛▌▛▘
+▌▌▌█▌▙▌  ▌▌▌▄▌▙▌▙▖▙▖▐▖▙▌▌ 
+     ▌        ▌
+ 
+`
+
 var preview2 = `
  ▗▄▄▖ ▄▄▄      ▄▄▄▄  ▗▞▀▜▌▄▄▄▄  ▄ ▄▄▄▄   ▄▄▄ ▄▄▄▄  ▗▞▀▚▖▗▞▀▘   ■   ▄▄▄   ▄▄▄ 
 ▐▌   █   █     █ █ █ ▝▚▄▟▌█   █ ▄ █   █ ▀▄▄  █   █ ▐▛▀▀▘▝▚▄▖▗▄▟▙▄▖█   █ █    
@@ -27,7 +51,7 @@ var preview = `
 func Preview() {
 	rand.Seed(time.Now().UnixNano())
 
-	lines := strings.Split(strings.TrimRight(preview2, "\n"), "\n")
+	lines := strings.Split(strings.TrimRight(preview7, "\n"), "\n")
 
 	start := randomSoftColor()
 	end := randomSoftColor()

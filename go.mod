@@ -3,8 +3,10 @@ module visualizer
 go 1.23.12
 
 require (
+	github.com/chzyer/readline v1.5.1
 	github.com/fatih/color v1.18.0
 	github.com/gorilla/websocket v1.5.3
+	github.com/rs/zerolog v1.34.0
 )
 
 require (
