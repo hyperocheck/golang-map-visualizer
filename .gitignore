@@ -1,0 +1,13 @@
+# frontend
+frontend/node_modules/
+frontend/.vite/
+frontend/index.html
+frontend/package.json
+frontend/vite.config.mjs
+frontend/package-lock.json
+frontend/.prettierrc
+
+# node
+npm-debug.log
+package-lock.json
+
