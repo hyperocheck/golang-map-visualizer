@@ -1,9 +1,10 @@
 <script>
-  import { onMount } from 'svelte'
+  import { onMount, tick } from 'svelte'
   import JSONTree from 'svelte-json-tree'
   let selectedBucket = null
   let selectedKey = null
   let newValueJson = ''
+  let hovered = null
   function formatPreview(val) {
     if (val === null || val === undefined) return ''
     if (typeof val === 'object') {
@@ -18,7 +19,6 @@
   }
   let socket = null
   let stats = null
-  let viewBoxInitialized = false
   const bucketHeaderHeight = 18
   let buckets = []
   let oldBuckets = []
@@ -34,7 +34,10 @@
   const padding = 12
   const bucketStrokeWidth = 1.5
   const fixedTophashCellWidth = 27
-  let svgBuckets = []
+  let canvas
+  let ctx
+  let dpr = window.devicePixelRatio || 1
+  let svgBuckets = [] // Теперь это данные для рендера на canvas
   let svgArrows = []
   let svgLabels = []
   let svgWidth = 2000
@@ -47,6 +50,9 @@
   let isSideVisible = true
   let resizing = false
   let isPanning = false
+  let rafId = null
+  let lastMouseX = 0
+  let lastMouseY = 0
   async function load() {
     try {
       const [vizRes, oldRes, hmapRes] = await Promise.all([
@@ -56,9 +62,7 @@
       ])
       if (vizRes?.ok) {
         const data = await vizRes.json()
-        // статистику сохраняем ВСЕГДА
         stats = data.stats ?? null
-        // бакеты — только если массив и не пустой
         if (Array.isArray(data.buckets) && data.buckets.length > 0) {
           buckets = data.buckets
         } else {
@@ -72,13 +76,11 @@
       }
       if (oldRes?.ok) {
         const data = await oldRes.json()
-        // oldBuckets: берем ТОЛЬКО buckets
         if (Array.isArray(data.buckets)) {
           oldBuckets = data.buckets
         } else {
           oldBuckets = []
         }
-        // ВАЖНО: stats тут НЕ ТРОГАЕМ
       }
       if (hmapRes?.ok) {
         hmap = await hmapRes.json()
@@ -109,18 +111,10 @@
         }
         if (current.length) oldChains.push(current)
       }
-      buildSVG()
-      if (!viewBoxInitialized) {
-        const container = document.getElementById('svg-container')
-        if (container) {
-          const rect = container.getBoundingClientRect()
-          const aspect = rect.height / rect.width
-          vb.w = 1200
-          vb.h = 1200 * aspect
-          vb = vb
-          viewBoxInitialized = true
-        }
-      }
+      buildCanvasData()
+      // Всегда сбрасываем viewBox на полный вид после загрузки данных
+      vb = { x: 0, y: 0, w: svgWidth, h: svgHeight }
+      drawCanvas()
     } catch (e) {
       console.error('Ошибка загрузки данных:', e)
     }
@@ -135,25 +129,23 @@
       console.log('[ws] connected')
     }
     socket.onmessage = () => {
-      // ВАЖНО: просто перегружаем данные
       load()
     }
     socket.onclose = () => {
       console.log('[ws] disconnected, retrying...')
-      setTimeout(connectWS, 1000) // автопереподключение
+      setTimeout(connectWS, 1000)
     }
     socket.onerror = () => {
       socket.close()
     }
   }
-  function buildSVG() {
+  function buildCanvasData() {
     svgBuckets = []
     svgArrows = []
     svgLabels = []
     const hasOldChains = oldChains && oldChains.length > 0
     const hasNewChains = chains && chains.length > 0
     const showLabels = hasOldChains && hasNewChains
-    // --- Считаем displayBid отдельно, только для main-бакетов ---
     let mainCountOld = 0
     if (hasOldChains) {
       for (const chain of oldChains) {
@@ -172,7 +164,6 @@
         }
       }
     }
-    // --- Вычисляем ширины цепочек как раньше ---
     const chainWidths = []
     for (
       let idx = 0;
@@ -184,7 +175,6 @@
       idx++
     ) {
       let maxWidth = 260
-      // old chain
       if (hasOldChains && idx < oldChains.length && oldChains[idx].length > 0) {
         const chain = oldChains[idx]
         const fixedTophashWidth =
@@ -197,8 +187,8 @@
           const keys = b.keys && Array.isArray(b.keys) ? b.keys : []
           const values = b.values && Array.isArray(b.values) ? b.values : []
           const maxLen = Math.max(
-            ...keys.map((k) => formatPreview(k).length), // Используем форматтер
-            ...values.map((v) => formatPreview(v).length), // Используем форматтер
+            ...keys.map((k) => formatPreview(k).length),
+            ...values.map((v) => formatPreview(v).length),
             b.overflow ? b.overflow.toString().length : 0,
             0
           )
@@ -206,7 +196,6 @@
         })
         maxWidth = Math.max(maxWidth, ...widths, fixedTophashWidth)
       }
-      // new chain
       if (hasNewChains && idx < chains.length && chains[idx].length > 0) {
         const chain = chains[idx]
         const fixedTophashWidth =
@@ -219,8 +208,8 @@
           const keys = b.keys && Array.isArray(b.keys) ? b.keys : []
           const values = b.values && Array.isArray(b.values) ? b.values : []
           const maxLen = Math.max(
-            ...keys.map((k) => formatPreview(k).length), // Используем форматтер
-            ...values.map((v) => formatPreview(v).length), // Используем форматтер
+            ...keys.map((k) => formatPreview(k).length),
+            ...values.map((v) => formatPreview(v).length),
             b.overflow ? b.overflow.toString().length : 0,
             0
           )
@@ -235,7 +224,6 @@
     let newMaxY = 0
     let oldStartY = gapY + (showLabels ? 30 : 0)
     let newStartY = gapY
-    // --- Рисуем oldBuckets ---
     if (hasOldChains) {
       for (let idx = 0; idx < oldChains.length; idx++) {
         const chain = oldChains[idx]
@@ -284,7 +272,6 @@
       }
       newStartY = oldMaxY + gapY * 2
     }
-    // --- Рисуем newBuckets ---
     if (hasNewChains) {
       x = gapX
       for (let idx = 0; idx < chains.length; idx++) {
@@ -341,52 +328,443 @@
     svgWidth = x + 200
     svgHeight = Math.max(oldMaxY, newMaxY) + 200
   }
+  function drawCanvas() {
+    if (!ctx) return
+    const container = document.getElementById('canvas-container')
+    const rect = container.getBoundingClientRect()
+
+    canvas.width = rect.width * dpr
+    canvas.height = rect.height * dpr
+	ctx.setTransform(1, 0, 0, 1, 0, 0)
+    ctx.clearRect(0, 0, rect.width, rect.height)
+    ctx.scale(dpr, dpr)
+    const scaleX = rect.width / vb.w
+    const scaleY = rect.height / vb.h
+    const offsetX = -vb.x * scaleX
+    const offsetY = -vb.y * scaleY
+    ctx.translate(offsetX, offsetY)
+    ctx.scale(scaleX, scaleY)
+    // Рендерим только видимые элементы
+    const visibleBuckets = svgBuckets.filter((b) => {
+      const bx = b.x
+      const by = b.y
+      const bw = b.width
+      const bh = b.height
+      return (
+        bx + bw > vb.x && bx < vb.x + vb.w && by + bh > vb.y && by < vb.y + vb.h
+      )
+    })
+    const visibleArrows = svgArrows.filter((a) => {
+      const ax = a.x
+      const ay1 = a.y1
+      const ay2 = a.y2
+      return (
+        ax > vb.x &&
+        ax < vb.x + vb.w &&
+        ((ay1 > vb.y && ay1 < vb.y + vb.h) || (ay2 > vb.y && ay2 < vb.y + vb.h))
+      )
+    })
+    const visibleLabels = svgLabels.filter(
+      (l) => l.x > vb.x && l.x < vb.x + vb.w && l.y > vb.y && l.y < vb.y + vb.h
+    )
+    // Рендерим labels
+    ctx.font = 'bold 14px Arial'
+    visibleLabels.forEach((label) => {
+      ctx.fillStyle = label.isOld ? '#ff6b6b' : '#51cf66'
+      ctx.fillText(label.text, label.x, label.y)
+    })
+    // Рендерим buckets
+    visibleBuckets.forEach((b) => {
+      drawBucket(b, scaleX, scaleY)
+    })
+    // Рендерим arrows
+    visibleArrows.forEach((a) => {
+      ctx.strokeStyle = a.isOld ? '#ff6b6b' : '#000'
+      ctx.lineWidth = 1.5 / Math.min(scaleX, scaleY)
+      ctx.beginPath()
+      ctx.moveTo(a.x, a.y1)
+      ctx.lineTo(a.x, a.y2)
+      ctx.stroke()
+      // Arrow head
+      ctx.fillStyle = a.isOld ? '#ff6b6b' : '#000'
+      ctx.beginPath()
+      ctx.moveTo(a.x, a.y2)
+      ctx.lineTo(a.x - 4, a.y2 - 8)
+      ctx.lineTo(a.x + 4, a.y2 - 8)
+      ctx.closePath()
+      ctx.fill()
+    })
+    ctx.resetTransform()
+  }
+  function drawBucket(b, scaleX, scaleY) {
+    let bucketStroke = b.isOld ? '#ff6b6b' : '#000'
+	const strokeW = b.isOld ? 2 : bucketStrokeWidth
+    ctx.lineWidth = strokeW / Math.min(scaleX, scaleY)
+
+    if (
+      hovered &&
+      hovered.type === 'bucket' &&
+      hovered.bucket.id === b.bucket.id &&
+      hovered.isOld === b.isOld
+    ) {
+      bucketStroke = b.isOld ? '#ff8787' : '#228be6'
+    }
+    ctx.fillStyle = '#fff'
+    ctx.strokeStyle = bucketStroke
+    ctx.lineWidth = bucketStrokeWidth / Math.min(scaleX, scaleY)
+    ctx.beginPath()
+    ctx.roundRect(b.x, b.y, b.width, b.height, bucketRadius)
+    ctx.fill()
+    ctx.stroke()
+    // Header
+    if (b.bucket?.type === 'main') {
+      ctx.font = 'bold 11px Arial'
+      ctx.fillStyle = '#495057'
+      ctx.textAlign = 'left'
+      ctx.fillText(
+        `bid ${b.bucket.displayBid}`,
+        b.x + b.padding,
+        b.y + b.padding + 12
+      )
+    }
+    // Tophash
+    const tophash = b.bucket?.tophash || []
+    tophash.forEach((t, i) => {
+      ctx.fillStyle = '#eee'
+      ctx.strokeStyle = '#000'
+      ctx.lineWidth = 1 / Math.min(scaleX, scaleY)
+      ctx.fillRect(
+        b.x + b.padding + i * fixedTophashCellWidth,
+        b.y + b.padding + bucketHeaderHeight,
+        fixedTophashCellWidth,
+        tophashHeight
+      )
+      ctx.strokeRect(
+        b.x + b.padding + i * fixedTophashCellWidth,
+        b.y + b.padding + bucketHeaderHeight,
+        fixedTophashCellWidth,
+        tophashHeight
+      )
+      ctx.font = '12px Arial'
+      ctx.fillStyle = '#000'
+      ctx.textAlign = 'center'
+      ctx.fillText(
+        t,
+        b.x + b.padding + i * fixedTophashCellWidth + fixedTophashCellWidth / 2,
+        b.y + b.padding + bucketHeaderHeight + tophashHeight / 1.5
+      )
+    })
+    // Keys
+    const keys = b.bucket?.keys || []
+    keys.forEach((k, i) => {
+      let fill = k == null ? '#dbfdc9' : '#b2f2bb'
+      if (
+        hovered &&
+        hovered.type === 'key' &&
+        hovered.bucket.id === b.bucket.id &&
+        hovered.isOld === b.isOld &&
+        hovered.index === i
+      ) {
+        fill = '#9feaa4'
+      }
+      ctx.fillStyle = fill
+      ctx.strokeStyle = '#12b886'
+      ctx.lineWidth = 1 / Math.min(scaleX, scaleY)
+      ctx.fillRect(
+        b.x + b.padding,
+        b.y + b.padding + bucketHeaderHeight + tophashHeight + i * rowHeight,
+        b.width - padding * 2,
+        rowHeight
+      )
+      ctx.strokeRect(
+        b.x + b.padding,
+        b.y + b.padding + bucketHeaderHeight + tophashHeight + i * rowHeight,
+        b.width - padding * 2,
+        rowHeight
+      )
+      ctx.font = '13px Arial'
+      ctx.fillStyle = '#000'
+      ctx.textAlign = 'left'
+      ctx.fillText(
+        formatPreview(k),
+        b.x + b.padding + 6,
+        b.y +
+          b.padding +
+          bucketHeaderHeight +
+          tophashHeight +
+          i * rowHeight +
+          rowHeight / 1.5
+      )
+    })
+    // Values
+    const values = b.bucket?.values || []
+    const keysLen = keys.length
+    values.forEach((v, i) => {
+      let fill = v == null ? '#fff2b8' : '#ffec99'
+      if (
+        hovered &&
+        hovered.type === 'value' &&
+        hovered.bucket.id === b.bucket.id &&
+        hovered.isOld === b.isOld &&
+        hovered.index === i
+      ) {
+        fill = '#ffe066'
+      }
+      ctx.fillStyle = fill
+      ctx.strokeStyle = '#ffa94d'
+      ctx.lineWidth = 1 / Math.min(scaleX, scaleY)
+      ctx.fillRect(
+        b.x + b.padding,
+        b.y +
+          b.padding +
+          bucketHeaderHeight +
+          tophashHeight +
+          keysLen * rowHeight +
+          i * rowHeight,
+        b.width - padding * 2,
+        rowHeight
+      )
+      ctx.strokeRect(
+        b.x + b.padding,
+        b.y +
+          b.padding +
+          bucketHeaderHeight +
+          tophashHeight +
+          keysLen * rowHeight +
+          i * rowHeight,
+        b.width - padding * 2,
+        rowHeight
+      )
+      ctx.font = '13px Arial'
+      ctx.fillStyle = '#000'
+      ctx.fillText(
+        formatPreview(v),
+        b.x + b.padding + 6,
+        b.y +
+          b.padding +
+          bucketHeaderHeight +
+          tophashHeight +
+          keysLen * rowHeight +
+          i * rowHeight +
+          rowHeight / 1.5
+      )
+    })
+    // Overflow
+    if (b.bucket) {
+      const valuesLen = values.length
+      ctx.fillStyle = '#ddd'
+      ctx.strokeStyle = '#000'
+      ctx.lineWidth = 1 / Math.min(scaleX, scaleY)
+      ctx.fillRect(
+        b.x + b.padding,
+        b.y +
+          b.padding +
+          bucketHeaderHeight +
+          tophashHeight +
+          keysLen * rowHeight +
+          valuesLen * rowHeight,
+        b.width - padding * 2,
+        rowHeight
+      )
+      ctx.strokeRect(
+        b.x + b.padding,
+        b.y +
+          b.padding +
+          bucketHeaderHeight +
+          tophashHeight +
+          keysLen * rowHeight +
+          valuesLen * rowHeight,
+        b.width - padding * 2,
+        rowHeight
+      )
+      ctx.font = '12px Arial'
+      ctx.fillStyle = '#000'
+      ctx.fillText(
+        b.bucket.overflow || '',
+        b.x + b.padding + 6,
+        b.y +
+          b.padding +
+          bucketHeaderHeight +
+          tophashHeight +
+          keysLen * rowHeight +
+          valuesLen * rowHeight +
+          rowHeight / 1.5
+      )
+    }
+    // Selected highlight
+    if (
+      selectedKey &&
+      selectedKey.bucket.id === b.bucket.id &&
+      selectedKey.isOld === b.isOld
+    ) {
+      ctx.strokeStyle = '#ff0000'
+      ctx.lineWidth = 3 / Math.min(scaleX, scaleY)
+      ctx.strokeRect(
+        b.x + b.padding,
+        b.y +
+          b.padding +
+          bucketHeaderHeight +
+          tophashHeight +
+          selectedKey.index * rowHeight,
+        b.width - padding * 2,
+        rowHeight
+      )
+    }
+  }
   // Навигация
   function handleWheel(e) {
     e.preventDefault()
     const rect = e.currentTarget.getBoundingClientRect()
+    let newVb = { ...vb }
     if (e.ctrlKey || e.metaKey) {
       const mouseX = e.clientX - rect.left
       const mouseY = e.clientY - rect.top
       const svgMouseX = vb.x + (mouseX * vb.w) / rect.width
       const svgMouseY = vb.y + (mouseY * vb.h) / rect.height
-      const zoomFactor = Math.pow(1.001, e.deltaY * 5)
-      const newW = vb.w * zoomFactor
-      const newH = vb.h * zoomFactor
+      const zoomFactor = Math.pow(1.001, e.deltaY * -2)
+      const newW = vb.w / zoomFactor
+      const newH = vb.h / zoomFactor
       if (newW < 100 || newW > 40000) return
-      vb.x = svgMouseX - (mouseX / rect.width) * newW
-      vb.y = svgMouseY - (mouseY / rect.height) * newH
-      vb.w = newW
-      vb.h = newH
+      newVb.x = svgMouseX - (mouseX / rect.width) * newW
+      newVb.y = svgMouseY - (mouseY / rect.height) * newH
+      newVb.w = newW
+      newVb.h = newH
     } else {
-      vb.x += (e.deltaX * vb.w) / rect.width
-      vb.y += (e.deltaY * vb.h) / rect.height
+      newVb.x += (e.deltaX * vb.w) / rect.width
+      newVb.y += (e.deltaY * vb.h) / rect.height
     }
-    vb = vb
+    scheduleVbUpdate(newVb)
   }
   function handleMouseDown(e) {
-    if (e.button === 0) isPanning = true
+    if (e.button === 0) {
+      isPanning = true
+      lastMouseX = e.clientX
+      lastMouseY = e.clientY
+    }
   }
   function handleMouseUp() {
     isPanning = false
   }
   function handleMouseMove(e) {
     if (isPanning) {
+      const dx = e.clientX - lastMouseX
+      const dy = e.clientY - lastMouseY
+      lastMouseX = e.clientX
+      lastMouseY = e.clientY
       const rect = document
-        .getElementById('svg-container')
+        .getElementById('canvas-container')
         .getBoundingClientRect()
-      vb.x -= (e.movementX * vb.w) / rect.width
-      vb.y -= (e.movementY * vb.h) / rect.height
-      vb = vb
+      let newVb = { ...vb }
+      newVb.x -= (dx * vb.w) / rect.width
+      newVb.y -= (dy * vb.h) / rect.height
+      scheduleVbUpdate(newVb)
+    }
+    handleHover(e)
+  }
+  function handleHover(e) {
+    const rect = canvas.getBoundingClientRect()
+    const hoverX = ((e.clientX - rect.left) / rect.width) * vb.w + vb.x
+    const hoverY = ((e.clientY - rect.top) / rect.height) * vb.h + vb.y
+    let newHovered = null
+    for (const b of svgBuckets) {
+      if (hoverX >= b.x + b.padding && hoverX <= b.x + b.width - b.padding) {
+        // Check for keys
+        const keyYStart = b.y + b.padding + bucketHeaderHeight + tophashHeight
+        const keyYEnd = keyYStart + (b.bucket.keys || []).length * rowHeight
+        if (hoverY >= keyYStart && hoverY <= keyYEnd) {
+          const localY = hoverY - keyYStart
+          const index = Math.floor(localY / rowHeight)
+          newHovered = { type: 'key', bucket: b.bucket, isOld: b.isOld, index }
+          break
+        }
+        // Check for values
+        const valueYStart = keyYEnd
+        const valueYEnd =
+          valueYStart + (b.bucket.values || []).length * rowHeight
+        if (hoverY >= valueYStart && hoverY <= valueYEnd) {
+          const localY = hoverY - valueYStart
+          const index = Math.floor(localY / rowHeight)
+          newHovered = {
+            type: 'value',
+            bucket: b.bucket,
+            isOld: b.isOld,
+            index
+          }
+          break
+        }
+      }
+      // Check for bucket hover
+      if (
+        hoverX >= b.x &&
+        hoverX <= b.x + b.width &&
+        hoverY >= b.y &&
+        hoverY <= b.y + b.height
+      ) {
+        newHovered = { type: 'bucket', bucket: b.bucket, isOld: b.isOld }
+        break
+      }
+    }
+    if (JSON.stringify(newHovered) !== JSON.stringify(hovered)) {
+      hovered = newHovered
+      drawCanvas()
     }
   }
-  // ФИКС РЕСАЙЗА: Линейный расчет без тряски
+  function handleSingleClick(e) {
+    const rect = canvas.getBoundingClientRect()
+    const clickX = ((e.clientX - rect.left) / rect.width) * vb.w + vb.x
+    const clickY = ((e.clientY - rect.top) / rect.height) * vb.h + vb.y
+    for (const b of svgBuckets) {
+      if (
+        clickX >= b.x &&
+        clickX <= b.x + b.width &&
+        clickY >= b.y &&
+        clickY <= b.y + b.height
+      ) {
+        selectedKey = null
+        selectedBucket = b.bucket
+        drawCanvas()
+        return
+      }
+    }
+  }
+  function handleDblClick(e) {
+    const rect = canvas.getBoundingClientRect()
+    const clickX = ((e.clientX - rect.left) / rect.width) * vb.w + vb.x
+    const clickY = ((e.clientY - rect.top) / rect.height) * vb.h + vb.y
+    // Находим бакет и ячейку под кликом
+    for (const b of svgBuckets) {
+      if (clickX >= b.x + b.padding && clickX <= b.x + b.width - b.padding) {
+        const keyYStart = b.y + b.padding + bucketHeaderHeight + tophashHeight
+        const keyYEnd = keyYStart + (b.bucket.keys || []).length * rowHeight
+        if (clickY >= keyYStart && clickY <= keyYEnd) {
+          const localY = clickY - keyYStart
+          const index = Math.floor(localY / rowHeight)
+          if (
+            index >= 0 &&
+            index < b.bucket.keys.length &&
+            b.bucket.keys[index] != null
+          ) {
+            selectKey(b.bucket, index, b.isOld)
+            drawCanvas()
+            return
+          }
+        }
+      }
+    }
+  }
+  function scheduleVbUpdate(newVb) {
+    if (rafId) cancelAnimationFrame(rafId)
+    rafId = requestAnimationFrame(() => {
+      vb = newVb
+      drawCanvas()
+      rafId = null
+    })
+  }
   function startResize(e) {
     resizing = true
     const startMouseX = e.clientX
     const startSideWidth = sideWidth
-    // Фиксируем масштаб и аспект один раз в момент клика
-    const container = document.getElementById('svg-container')
+    const container = document.getElementById('canvas-container')
     const initialRect = container.getBoundingClientRect()
     const unitsPerPixel = vb.w / initialRect.width
     const aspect = initialRect.height / initialRect.width
@@ -395,14 +773,13 @@
       const dx = startMouseX - ev.clientX
       const newSideWidth = Math.max(100, Math.min(800, startSideWidth + dx))
       const diffPx = newSideWidth - sideWidth
-      // Синхронное обновление CSS и viewBox
       sideWidth = newSideWidth
-      vb.w -= diffPx * unitsPerPixel
-      // Используем математический аспект вместо опроса DOM для плавности
+      let newVb = { ...vb }
+      newVb.w -= diffPx * unitsPerPixel
       const currentContainerWidth =
         initialRect.width - (newSideWidth - startSideWidth)
-      vb.h = vb.w * (initialRect.height / currentContainerWidth)
-      vb = vb
+      newVb.h = newVb.w * (initialRect.height / currentContainerWidth)
+      scheduleVbUpdate(newVb)
     }
     const onMouseUp = () => {
       resizing = false
@@ -413,7 +790,7 @@
     window.addEventListener('mouseup', onMouseUp)
   }
   function toggleSide() {
-    const container = document.getElementById('svg-container')
+    const container = document.getElementById('canvas-container')
     const rect = container.getBoundingClientRect()
     const unitsPerPixel = vb.w / rect.width
     if (isSideVisible) {
@@ -424,12 +801,13 @@
       sideWidth = lastSideWidth
       isSideVisible = true
     }
-    // ❗ Ждём следующий frame, когда DOM уже стабилен
     requestAnimationFrame(() => {
       const newRect = container.getBoundingClientRect()
-      vb.w = unitsPerPixel * newRect.width
-      vb.h = vb.w * (newRect.height / newRect.width)
-      vb = vb
+      let newVb = { ...vb }
+      newVb.w = unitsPerPixel * newRect.width
+      newVb.h = newVb.w * (newRect.height / newRect.width)
+      vb = newVb
+      drawCanvas()
     })
   }
   function selectKey(bucket, index, isOld) {
@@ -442,7 +820,6 @@
       value: bucket.values[index],
       isOld
     }
-    // Инициализируем input как JSON.stringify, но пользователь может редактировать как raw
     newValueJson = JSON.stringify(selectedKey.value, null, 2)
   }
   function handleKeyDown(e) {
@@ -455,6 +832,7 @@
     if (!selectedKey) return
     if (e.key === 'Escape') {
       selectedKey = null
+      drawCanvas()
       return
     }
     if (e.key === 'd') {
@@ -476,12 +854,10 @@
           alert('Error deleting key')
         })
     } else if (e.key === 'u') {
-      let newVal = newValueJson // По умолчанию как raw string
+      let newVal = newValueJson
       try {
-        newVal = JSON.parse(newValueJson) // Если JSON — спарсим в объект
-      } catch {
-        // Не JSON — оставляем как string (raw)
-      }
+        newVal = JSON.parse(newValueJson)
+      } catch {}
       fetch('/update_key', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -502,252 +878,38 @@
     }
   }
   onMount(() => {
-    load() // начальная загрузка
-    connectWS() // подписка на обновления
+    load()
+    connectWS()
+    ctx = canvas.getContext('2d')
     window.addEventListener('keydown', handleKeyDown)
+    window.addEventListener('resize', () => drawCanvas())
     return () => {
       window.removeEventListener('keydown', handleKeyDown)
+      window.removeEventListener('resize', () => drawCanvas())
     }
   })
 </script>
 
 <div class="root">
   <div
-    id="svg-container"
+    id="canvas-container"
     on:wheel|nonpassive={handleWheel}
     on:mousedown={handleMouseDown}
     on:mousemove={handleMouseMove}
     on:mouseup={handleMouseUp}
     on:mouseleave={handleMouseUp}
+    on:dblclick={handleDblClick}
+    on:click={handleSingleClick}
   >
     <button class="toggle-btn" on:click={toggleSide}>
       {isSideVisible ? '→' : '← hmap'}
     </button>
-    <svg
-      viewBox="{vb.x} {vb.y} {vb.w} {vb.h}"
+    <canvas
+      bind:this={canvas}
       width="100%"
       height="100%"
-      preserveAspectRatio="xMinYMin meet"
-    >
-      <defs>
-        <marker
-          id="arrow"
-          markerWidth="6"
-          markerHeight="6"
-          refX="3"
-          refY="3"
-          orient="auto"
-        >
-          <path d="M0,0 L6,3 L0,6 Z" fill="#000" />
-        </marker>
-        <marker
-          id="arrow-old"
-          markerWidth="6"
-          markerHeight="6"
-          refX="3"
-          refY="3"
-          orient="auto"
-        >
-          <path d="M0,0 L6,3 L0,6 Z" fill="#ff6b6b" />
-        </marker>
-        <filter id="bucket-shadow" x="-30%" y="-30%" width="140%" height="140%">
-          <feDropShadow
-            dx="4"
-            dy="4"
-            stdDeviation="1"
-            flood-color="#51cf66"
-            flood-opacity="0.5"
-          />
-        </filter>
-      </defs>
-      <!-- Метки old/new -->
-      {#each svgLabels as label}
-        <text
-          x={label.x}
-          y={label.y}
-          class={label.isOld ? 'label-old' : 'label-new'}
-          font-size="14"
-          font-weight="bold"
-          font-family="Arial, sans-serif"
-        >
-          {label.text}
-        </text>
-      {/each}
-      {#each svgBuckets as b (b.id)}
-        {#if b.x + b.width > vb.x && b.x < vb.x + vb.w && b.y + b.height > vb.y && b.y < vb.y + vb.h}
-          <g
-            transform={`translate(${b.x}, ${b.y})`}
-            class="bucket-group"
-            on:click={() => {
-              selectedKey = null
-              selectedBucket = b.bucket
-            }}
-            style="cursor: pointer"
-          >
-            <rect
-              class="bucket-rect {b.isOld ? 'bucket-old' : ''}"
-              width={b.width}
-              height={b.height}
-              fill="#fff"
-              stroke={b.isOld ? '#ff6b6b' : '#000'}
-              stroke-width={b.isOld ? 2 : bucketStrokeWidth}
-              rx={bucketRadius}
-              ry={bucketRadius}
-              filter="url(#bucket-shadow)"
-            />
-            {#if b.bucket?.type === 'main'}
-              <text
-                x={b.padding}
-                y={b.padding + 12}
-                font-size="11"
-                font-weight="bold"
-                fill="#495057"
-              >
-                bid {b.bucket.displayBid}
-              </text>
-            {/if}
-            {#each b.bucket?.tophash || [] as t, i}
-              <rect
-                x={b.padding + i * fixedTophashCellWidth}
-                y={b.padding + bucketHeaderHeight}
-                width={fixedTophashCellWidth}
-                height={tophashHeight}
-                fill="#eee"
-                stroke="#000"
-              />
-              <text
-                x={b.padding +
-                  i * fixedTophashCellWidth +
-                  fixedTophashCellWidth / 2}
-                y={b.padding + bucketHeaderHeight + tophashHeight / 1.5}
-                font-size="12"
-                text-anchor="middle">{t}</text
-              >
-            {/each}
-            {#each b.bucket?.keys || [] as k, i}
-              <rect
-                x={b.padding}
-                y={b.padding +
-                  bucketHeaderHeight +
-                  tophashHeight +
-                  i * rowHeight}
-                width={b.width - padding * 2}
-                height={rowHeight}
-                fill={k == null ? '#dbfdc9' : '#b2f2bb'}
-                stroke="#12b886"
-                class="cell-key {selectedKey &&
-                selectedKey.bucket.id === b.bucket.id &&
-                selectedKey.isOld === b.isOld &&
-                selectedKey.index === i
-                  ? 'selected'
-                  : ''}"
-                on:dblclick={k != null
-                  ? () => selectKey(b.bucket, i, b.isOld)
-                  : null}
-              />
-              <text
-                x={b.padding + 6}
-                y={b.padding +
-                  bucketHeaderHeight +
-                  tophashHeight +
-                  i * rowHeight +
-                  rowHeight / 1.5}
-                font-size="13"
-              >
-                <title>{JSON.stringify(k)}</title>
-                <!-- Тултип с полным JSON при наведении -->
-                {formatPreview(k)}
-                <!-- Используем форматтер вместо k ?? '' -->
-              </text>
-            {/each}
-            {#each b.bucket?.values || [] as v, i}
-              {@const keysLen = (b.bucket?.keys || []).length}
-              <rect
-                x={b.padding}
-                y={b.padding +
-                  bucketHeaderHeight +
-                  tophashHeight +
-                  keysLen * rowHeight +
-                  i * rowHeight}
-                width={b.width - padding * 2}
-                height={rowHeight}
-                fill={v == null ? '#fff2b8' : '#ffec99'}
-                stroke="#ffa94d"
-                class="cell-value"
-              />
-              <text
-                x={b.padding + 6}
-                y={b.padding +
-                  bucketHeaderHeight +
-                  tophashHeight +
-                  keysLen * rowHeight +
-                  i * rowHeight +
-                  rowHeight / 1.5}
-                font-size="13"
-              >
-                <title>{JSON.stringify(v)}</title>
-                <!-- Тултип с полным JSON -->
-                {formatPreview(v)}
-                <!-- Используем форматтер вместо v ?? '' -->
-              </text>
-            {/each}
-            {#if b.bucket}
-              {@const keysLen = (b.bucket.keys || []).length}
-              {@const valuesLen = (b.bucket.values || []).length}
-              <rect
-                x={b.padding}
-                y={b.padding +
-                  bucketHeaderHeight +
-                  tophashHeight +
-                  keysLen * rowHeight +
-                  valuesLen * rowHeight}
-                width={b.width - padding * 2}
-                height={rowHeight}
-                fill="#ddd"
-                stroke="#000"
-              />
-              <text
-                x={b.padding + 6}
-                y={b.padding +
-                  bucketHeaderHeight +
-                  tophashHeight +
-                  keysLen * rowHeight +
-                  valuesLen * rowHeight +
-                  rowHeight / 1.5}
-                font-size="12">{b.bucket.overflow || ''}</text
-              >
-            {/if}
-            {#if selectedKey && selectedKey.bucket.id === b.bucket.id && selectedKey.isOld === b.isOld}
-              <rect
-                x={b.padding}
-                y={b.padding +
-                  bucketHeaderHeight +
-                  tophashHeight +
-                  selectedKey.index * rowHeight}
-                width={b.width - padding * 2}
-                height={rowHeight}
-                fill="none"
-                stroke="#ff0000"
-                stroke-width="3"
-              />
-            {/if}
-          </g>
-        {/if}
-      {/each}
-      {#each svgArrows as a}
-        {#if a.x > vb.x && a.x < vb.x + vb.w}
-          <line
-            x1={a.x}
-            y1={a.y1}
-            x2={a.x}
-            y2={a.y2}
-            stroke={a.isOld ? '#ff6b6b' : '#000'}
-            stroke-width="2"
-            marker-end={a.isOld ? 'url(#arrow-old)' : 'url(#arrow)'}
-          />
-        {/if}
-      {/each}
-    </svg>
+      style="width: 100%; height: 100%;"
+    ></canvas>
   </div>
   {#if isSideVisible}
     <div class="splitter" on:mousedown={startResize}></div>
@@ -854,15 +1016,6 @@
 </div>
 
 <style>
-  :global(::-webkit-scrollbar) {
-    width: 0 !important;
-    height: 0 !important;
-    display: none !important;
-  }
-  :global(*) {
-    -ms-overflow-style: none !important;
-    scrollbar-width: none !important;
-  }
   .root {
     display: flex;
     width: 100vw;
@@ -870,15 +1023,14 @@
     overflow: hidden;
     background: #ebfbee;
   }
-  #svg-container {
+  #canvas-container {
     flex: 1;
     position: relative;
     overflow: hidden;
     cursor: grab;
     touch-action: none;
-    transition: none !important;
   }
-  #svg-container:active {
+  #canvas-container:active {
     cursor: grabbing;
   }
   .toggle-btn {
@@ -910,11 +1062,6 @@
     font-family: monospace;
     font-size: 13px;
     flex-shrink: 0;
-    transition: none !important;
-  }
-  svg {
-    display: block;
-    user-select: none;
   }
   .row {
     display: flex;
@@ -922,28 +1069,6 @@
     padding: 2px 0;
     border-bottom: 1px solid #eee;
   }
-  .bucket-group:hover .bucket-rect {
-    stroke-width: 2.5;
-  }
-  .bucket-group:hover .bucket-old {
-    stroke: #ff8787 !important;
-  }
-  .bucket-group:hover .bucket-rect:not(.bucket-old) {
-    stroke: #228be6;
-  }
-  .label-old {
-    fill: #ff6b6b;
-  }
-  .label-new {
-    fill: #51cf66;
-  }
-  .cell-key:hover {
-    fill: #9feaa4;
-  }
-  .cell-value:hover {
-    fill: #ffe066;
-  }
-  /* СТИЛИ ДЛЯ ДЕРЕВА JSON */
   .tree-label {
     font-size: 11px;
     font-weight: bold;
@@ -964,11 +1089,4 @@
     padding: 1px 4px;
     border-radius: 3px;
   }
-  /* Подсветка выбранного бакета в SVG */
-  :global(.bucket-group) {
-    cursor: pointer;
-  }
-  .selected {
-    fill: #9feaa4;
-  } /* Optional: change fill for selected, remove stroke */
 </style>
