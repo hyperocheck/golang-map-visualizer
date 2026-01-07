@@ -2,9 +2,11 @@ package engine
 
 import (
 	"net/http"
-	"log"
+	"fmt"
 	"encoding/json"
+
 	"visualizer/src/ws"
+	"visualizer/src/logger"
 )
 
 func (t *Type[K, V]) VisualHandler(w http.ResponseWriter, req *http.Request) {
@@ -34,7 +36,7 @@ func (t *Type[K, V]) DeleteKey(w http.ResponseWriter, req *http.Request) {
 	var response KVreq[K, V] 
 	err := json.NewDecoder(req.Body).Decode(&response)
 	if err != nil {
-		log.Println("delete key handler:", err)
+		logger.Log.Log("error", fmt.Sprintf("DeleteKey handler err: %s", err))
 		return
 	}
 
@@ -43,7 +45,7 @@ func (t *Type[K, V]) DeleteKey(w http.ResponseWriter, req *http.Request) {
 	t.VisualOldHandler(w, req)
 	t.HmapHandler(w, req)
 	ws.NotifyUpdate()
-	log.Println("delete key ok!")
+	logger.Log.Log("info", "delete key ok!")
 }
 
 func (t *Type[K, V]) UpdateKey(w http.ResponseWriter, req *http.Request) {
@@ -52,7 +54,7 @@ func (t *Type[K, V]) UpdateKey(w http.ResponseWriter, req *http.Request) {
 	var response KVreq[K, V]
 	err := json.NewDecoder(req.Body).Decode(&response)
 	if err != nil {
-		log.Println("update key handler:", err)
+		logger.Log.Log("error", fmt.Sprintf("UpdateKey handler err: %s", err))
 		return
 	}
 
@@ -61,5 +63,5 @@ func (t *Type[K, V]) UpdateKey(w http.ResponseWriter, req *http.Request) {
 	t.VisualOldHandler(w, req)
 	t.HmapHandler(w, req)
 	ws.NotifyUpdate()
-	log.Println("update key ok")
+	logger.Log.Log("info", "update key ok!")
 }
