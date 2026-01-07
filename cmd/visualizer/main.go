@@ -21,7 +21,7 @@ func main() {
 
 		m := make(map[int]int)
 
-		for i := range 25 {
+		for i := range 26 {
 			m[i] = i
 		}
 

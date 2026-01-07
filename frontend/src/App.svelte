@@ -17,6 +17,44 @@
     if (!Array.isArray(arr)) return arr
     return arr.map((v) => (v == null ? 'ZeroValue' : v))
   }
+  function syncVbAspect() {
+    const container = document.getElementById('canvas-container')
+    const rect = container.getBoundingClientRect()
+    const aspect = rect.height / rect.width
+    vb.h = vb.w * aspect
+  }
+
+  let cameraInitialized = false
+  function fitInitialBuckets(count = 4) {
+    if (!svgBuckets.length) return
+
+    const buckets = svgBuckets.slice(0, count)
+
+    let minX = Infinity
+    let minY = Infinity
+    let maxX = -Infinity
+    let maxY = -Infinity
+
+    for (const b of buckets) {
+      minX = Math.min(minX, b.x)
+      minY = Math.min(minY, b.y)
+      maxX = Math.max(maxX, b.x + b.width)
+      maxY = Math.max(maxY, b.y + b.height)
+    }
+
+    const padding = 80 // визуальный воздух
+    minX -= padding
+    minY -= padding
+    maxX += padding
+    maxY += padding
+
+    vb.x = minX
+    vb.y = minY
+    vb.w = maxX - minX
+
+    syncVbAspect()
+  }
+
   let socket = null
   let stats = null
   const bucketHeaderHeight = 18
@@ -111,9 +149,17 @@
         }
         if (current.length) oldChains.push(current)
       }
-      buildCanvasData()
       // Всегда сбрасываем viewBox на полный вид после загрузки данных
-      vb = { x: 0, y: 0, w: svgWidth, h: svgHeight }
+      buildCanvasData()
+
+      if (!cameraInitialized) {
+        fitInitialBuckets(4)
+        cameraInitialized = true
+        //vb = { x: 0, y: 0, w: svgWidth, h: 0 }
+        //syncVbAspect()
+        //cameraInitialized = true
+      }
+
       drawCanvas()
     } catch (e) {
       console.error('Ошибка загрузки данных:', e)
@@ -335,7 +381,7 @@
 
     canvas.width = rect.width * dpr
     canvas.height = rect.height * dpr
-	ctx.setTransform(1, 0, 0, 1, 0, 0)
+    ctx.setTransform(1, 0, 0, 1, 0, 0)
     ctx.clearRect(0, 0, rect.width, rect.height)
     ctx.scale(dpr, dpr)
     const scaleX = rect.width / vb.w
@@ -368,7 +414,7 @@
       (l) => l.x > vb.x && l.x < vb.x + vb.w && l.y > vb.y && l.y < vb.y + vb.h
     )
     // Рендерим labels
-    ctx.font = 'bold 14px Arial'
+    ctx.font = 'bold 14px JetBrains Mono'
     visibleLabels.forEach((label) => {
       ctx.fillStyle = label.isOld ? '#ff6b6b' : '#51cf66'
       ctx.fillText(label.text, label.x, label.y)
@@ -398,12 +444,11 @@
   }
   function drawBucket(b, scaleX, scaleY) {
     let bucketStroke = b.isOld ? '#ff6b6b' : '#000'
-	const strokeW = b.isOld ? 2 : bucketStrokeWidth
+    const strokeW = b.isOld ? 2 : bucketStrokeWidth
     ctx.lineWidth = strokeW / Math.min(scaleX, scaleY)
 
     if (
       hovered &&
-      hovered.type === 'bucket' &&
       hovered.bucket.id === b.bucket.id &&
       hovered.isOld === b.isOld
     ) {
@@ -418,7 +463,7 @@
     ctx.stroke()
     // Header
     if (b.bucket?.type === 'main') {
-      ctx.font = 'bold 11px Arial'
+      ctx.font = 'bold 11px JetBrains Mono'
       ctx.fillStyle = '#495057'
       ctx.textAlign = 'left'
       ctx.fillText(
@@ -445,7 +490,7 @@
         fixedTophashCellWidth,
         tophashHeight
       )
-      ctx.font = '12px Arial'
+      ctx.font = '12px JetBrains Mono'
       ctx.fillStyle = '#000'
       ctx.textAlign = 'center'
       ctx.fillText(
@@ -482,7 +527,7 @@
         b.width - padding * 2,
         rowHeight
       )
-      ctx.font = '13px Arial'
+      ctx.font = '13px JetBrains Mono'
       ctx.fillStyle = '#000'
       ctx.textAlign = 'left'
       ctx.fillText(
@@ -535,7 +580,7 @@
         b.width - padding * 2,
         rowHeight
       )
-      ctx.font = '13px Arial'
+      ctx.font = '13px JetBrains Mono'
       ctx.fillStyle = '#000'
       ctx.fillText(
         formatPreview(v),
@@ -577,7 +622,7 @@
         b.width - padding * 2,
         rowHeight
       )
-      ctx.font = '12px Arial'
+      ctx.font = '12px JetBrains Mono'
       ctx.fillStyle = '#000'
       ctx.fillText(
         b.bucket.overflow || '',
@@ -778,7 +823,8 @@
       newVb.w -= diffPx * unitsPerPixel
       const currentContainerWidth =
         initialRect.width - (newSideWidth - startSideWidth)
-      newVb.h = newVb.w * (initialRect.height / currentContainerWidth)
+      vb.w -= diffPx * unitsPerPixel
+      syncVbAspect()
       scheduleVbUpdate(newVb)
     }
     const onMouseUp = () => {
@@ -882,7 +928,10 @@
     connectWS()
     ctx = canvas.getContext('2d')
     window.addEventListener('keydown', handleKeyDown)
-    window.addEventListener('resize', () => drawCanvas())
+    window.addEventListener('resize', () => {
+      syncVbAspect()
+      drawCanvas()
+    })
     return () => {
       window.removeEventListener('keydown', handleKeyDown)
       window.removeEventListener('resize', () => drawCanvas())
