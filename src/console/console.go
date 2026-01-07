@@ -20,6 +20,7 @@ var (
 	green  = color.New(color.FgGreen)
 )
 
+
 func StartConsole[K comparable, V any](t *engine.Type[K, V]) {
 	time.Sleep(200 * time.Millisecond)
 
@@ -192,3 +193,5 @@ func parseStringToType[T any](s string) (T, error) {
 		return zero, fmt.Errorf("unsupported type")
 	}
 }
+
+

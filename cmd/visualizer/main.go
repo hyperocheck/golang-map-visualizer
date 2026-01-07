@@ -64,7 +64,7 @@ func main() {
 
 		m := make(map[int]int)
 
-		for i := range 100 {
+		for i := range 0 {
 			m[i] = i
 		}
 
