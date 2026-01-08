@@ -3,6 +3,7 @@
 </p>
 <p align="center">
     <img src="https://img.shields.io/badge/-1.23-brightgreen?style=plastic&logo=go&logoColor=white" />
+	<img src="https://img.shields.io/badge/Svelte-FF3E00?style=plastic&logo=svelte&logoColor=white" />
 </p>
 
 
