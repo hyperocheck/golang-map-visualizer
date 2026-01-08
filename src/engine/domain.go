@@ -1,8 +1,8 @@
 package engine
 
 import (
-	"unsafe"
 	"encoding/json"
+	"unsafe"
 )
 
 type BucketStats struct {
@@ -49,7 +49,7 @@ type hmapJSON struct {
 type mapextra struct {
 	overflow     *[]*bmap
 	oldoverflow  *[]*bmap
-	nextOverflow *bmap 
+	nextOverflow *bmap
 }
 
 type bmap struct {
@@ -75,7 +75,7 @@ type bucketJSON struct {
 	Tophash  [8]uint8           `json:"tophash"`
 	Keys     [8]json.RawMessage `json:"keys,omitempty"`
 	Values   [8]json.RawMessage `json:"values,omitempty"`
-	Overflow string             `json:"overflow"`  
+	Overflow string             `json:"overflow"`
 
 	Type string `json:"type"` // main || overflow
 	ID   int    `json:"id"`   // main bucket id (bid)
