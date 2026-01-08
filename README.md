@@ -13,6 +13,7 @@
 - [x] The ability to perform operations with the map directly from the visualization
 - [ ] Implement map visualization for versions >1.23💀
 - [ ] Add an endpoint with an overview of the work of the map (tutorial)
+- [ ] I need a good image for the logo 🎃
 
 ## About Project
 <img width="960" height="540" alt="{EB9CD144-2318-4688-922F-841DB8A6C077}" src="https://github.com/user-attachments/assets/6c94bb2e-5148-4a85-be9a-d71b6810e7f1" />
@@ -69,7 +70,19 @@ Command |	Description
 `update <k> <v>` | guess
 `delete <k>` | guess
 ## About custom K&V in map type (map[K]V)
-If you want to use a custom type as a key and/or value, you need to implement the Parse method for it so that you can use cli later. After all, the author can't guess how you want to enter your own structure in the insert command, right?:D For example, you want to use `int` as the key and such an interesting structure as the value 
+**🥀PLEASE DO NOT FORGET TO MAKE ALL STRUCT FIELDS PUBLIC🥀**    
+There are two ways to use custom types as keys and values. The __simple__ way is to just create a structure and add json tags to it. Then you will use the cli using the json input format. Something like this:
+```go
+// --- A SIMPLE WAY TO USE CUSTOM TYPES ---
+// Simply create a custom structure with JSON tags. In the CLI, you will enter JSON. F.e.: (map[int]UserCustomDataExample1)
+type UserCustomDataExample1 struct {
+	I1 int    `json:"i1"`
+	I2 int    `json:"i2"`
+	S1 []bool `json:"s1`
+}
+// In the CLI, it will look like this: insert 100 {"i1":10, "i2":42, "s1": [true, false, false]} 
+```
+And __hard way__. You need to implement the Parse method for it so that you can use cli later. After all, the author can't guess how you want to enter your own structure in the insert command, right?:D For example, you want to use `int` as the key and such an interesting structure as the value 
 ```go
 type MyInterestingStuct struct {
     I1 int
