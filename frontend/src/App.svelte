@@ -984,7 +984,7 @@
         <b>{stats.maxChainLen}</b>
       </div>
       <div class="row">
-        <span>Bucket with max chain</span>
+        <span>First BID with max chain</span>
         <b>
           {stats.maxChainBucketID >= 0 ? stats.maxChainBucketID : '—'}
         </b>
@@ -1034,7 +1034,7 @@
           style="width: 100%; height: 100px; font-family: monospace; font-size: 12px;"
         />
         <p style="font-size: 11px; color: #666; margin-top: 5px;">
-          Введите JSON для объектов или raw строку/число. Press 'd' to delete,
+          Enter JSON for objects or raw string/number. Press 'd' to delete,
           'u' to update, 'Esc' to deselect.
         </p>
       {:else if selectedBucket}
@@ -1057,7 +1057,7 @@
         <p
           style="color: #999; font-size: 12px; font-style: italic; text-align: center;"
         >
-          Кликните на бакет для анализа
+		  Click on the bucket to analyze
         </p>
       {/if}
     </div>
