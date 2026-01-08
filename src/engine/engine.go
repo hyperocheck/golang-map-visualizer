@@ -246,12 +246,16 @@ func GetHmapJSON(h *Hmap) ([]byte, error) {
 	if h == nil {
 		return []byte(`{"error":"Hmap is nil"}`), nil
 	}
-
+	
+	NumBuckets := 0 
+	if h.buckets != nil {
+		NumBuckets = 1 << h.B
+	}
 	jsonH := hmapJSON{
 		Count:      h.count,
 		Flags:      h.flags,
 		B:          h.B,
-		NumBuckets: 1 << h.B,
+		NumBuckets: NumBuckets,
 		NOverflow:  h.noverflow,
 		Hash0:      h.hash0,
 		Buckets:    fmt.Sprintf("%p", h.buckets),
@@ -341,12 +345,12 @@ func GetKVType[K comparable, V any](t *Type[K, V]) [2]string {
 func (t *Type[K, V]) PrintHmap() {
 
 	h := t.GetHmap()
-
+	
 	lines := []string{
 		"Hmap {",
 		fmt.Sprintf("  count       %v", h.count),
 		fmt.Sprintf("  flags       %v", h.flags),
-		fmt.Sprintf("  B           %v -> num_buckets=%v", h.B, uintptr(1)<<h.B),
+		fmt.Sprintf("  B           %v", h.B),
 		fmt.Sprintf("  noverflow   %v", h.noverflow),
 		fmt.Sprintf("  hash0       %v", h.hash0),
 		fmt.Sprintf("  buckets     0x%x", h.buckets),
