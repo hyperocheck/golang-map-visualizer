@@ -1,12 +1,12 @@
 package engine
 
 import (
-	"net/http"
-	"fmt"
 	"encoding/json"
+	"fmt"
+	"net/http"
 
-	"visualizer/src/ws"
 	"visualizer/src/logger"
+	"visualizer/src/ws"
 )
 
 func (t *Type[K, V]) VisualHandler(w http.ResponseWriter, req *http.Request) {
@@ -26,14 +26,14 @@ func (t *Type[K, V]) HmapHandler(w http.ResponseWriter, req *http.Request) {
 }
 
 type KVreq[K comparable, V any] struct {
-	Key K`json:"key"`
-	Value V`json:"value","omitempty"`
+	Key   K `json:"key"`
+	Value V `json:"value","omitempty"`
 }
 
 func (t *Type[K, V]) DeleteKey(w http.ResponseWriter, req *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
-	 
-	var response KVreq[K, V] 
+
+	var response KVreq[K, V]
 	err := json.NewDecoder(req.Body).Decode(&response)
 	if err != nil {
 		logger.Log.Log("error", fmt.Sprintf("DeleteKey handler err: %s", err))
@@ -50,7 +50,7 @@ func (t *Type[K, V]) DeleteKey(w http.ResponseWriter, req *http.Request) {
 
 func (t *Type[K, V]) UpdateKey(w http.ResponseWriter, req *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
-	
+
 	var response KVreq[K, V]
 	err := json.NewDecoder(req.Body).Decode(&response)
 	if err != nil {

@@ -19,8 +19,7 @@ var (
 )
 
 func StartConsole[K comparable, V any](t *engine.Type[K, V]) {
-	time.Sleep(200 * time.Millisecond)
-
+	time.Sleep(time.Millisecond * 150)
 	green.Println("Команды: show, hmap, delete <key>, update <key> <value>, insert <key> <value>, exit")
 
 	rl := logger.Log.RL
@@ -142,4 +141,3 @@ func StartConsole[K comparable, V any](t *engine.Type[K, V]) {
 		}
 	}
 }
-
