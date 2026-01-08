@@ -1065,10 +1065,22 @@
 </div>
 
 <style>
+  html,
+  body {
+    margin: 0;
+    padding: 0;
+    width: 100%;
+    height: 100%;
+  }
+
+  * {
+    box-sizing: border-box;
+  }
+
   .root {
     display: flex;
-    width: 100vw;
-    height: 100vh;
+    width: 100%;
+    height: 100dvh;
     overflow: hidden;
     background: #ebfbee;
   }
@@ -1137,5 +1149,12 @@
     background: #eee;
     padding: 1px 4px;
     border-radius: 3px;
+  }
+  :global(html, body) {
+    margin: 0;
+    padding: 0;
+    width: 100%;
+    height: 100%;
+    overflow: hidden; /* ← ВАЖНО */
   }
 </style>
