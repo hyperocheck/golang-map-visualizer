@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"log"
 	"syscall"
-	
+
 	"visualizer/src/console"
 	"visualizer/src/engine"
 	"visualizer/src/preview"

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"log"
 	"reflect"
 	"strconv"
 	"unsafe"
@@ -29,6 +30,17 @@ func ParseValue[T any](s string) (T, error) {
 	return parseStringToType[T](s)
 }
 
+func parseJSONToType[T any](s string) (T, error) {
+	var zero T
+
+	err := json.Unmarshal([]byte(s), &zero)
+	log.Println("parseJSONToType err", err)
+	if err != nil {
+		return zero, err
+	}
+	return zero, nil
+}
+
 func parseStringToType[T any](s string) (T, error) {
 	var zero T
 
@@ -41,7 +53,9 @@ func parseStringToType[T any](s string) (T, error) {
 		return any(v).(T), err
 	case *int:
 		v, err := strconv.Atoi(s)
-		if err != nil {return zero, err}
+		if err != nil {
+			return zero, err
+		}
 		return any(&v).(T), nil
 	case int8:
 		v, err := strconv.ParseInt(s, 10, 8)
@@ -80,6 +94,9 @@ func parseStringToType[T any](s string) (T, error) {
 		v, err := strconv.ParseBool(s)
 		return any(v).(T), err
 	default:
+		if v, err := parseJSONToType[T](s); err == nil {
+			return any(v).(T), nil
+		}
 		return zero, fmt.Errorf("unsupported type")
 	}
 }
@@ -246,8 +263,8 @@ func GetHmapJSON(h *Hmap) ([]byte, error) {
 	if h == nil {
 		return []byte(`{"error":"Hmap is nil"}`), nil
 	}
-	
-	NumBuckets := 0 
+
+	NumBuckets := 0
 	if h.buckets != nil {
 		NumBuckets = 1 << h.B
 	}
@@ -328,7 +345,7 @@ func (t *Type[K, V]) Generate() {
 	log.Println("max_chain_lenght: ", cmax)
 	log.Println("max_chain: ", mstr)
 }
-*/ 
+*/
 
 func GetKVType[K comparable, V any](t *Type[K, V]) [2]string {
 	var out [2]string
@@ -345,7 +362,7 @@ func GetKVType[K comparable, V any](t *Type[K, V]) [2]string {
 func (t *Type[K, V]) PrintHmap() {
 
 	h := t.GetHmap()
-	
+
 	lines := []string{
 		"Hmap {",
 		fmt.Sprintf("  count       %v", h.count),
@@ -372,4 +389,3 @@ func (t *Type[K, V]) PrintHmap() {
 		color.RGB(r, g, b).Println(line)
 	}
 }
-
