@@ -1,8 +1,8 @@
 package logger
 
 import (
-	"os"
 	"fmt"
+	"os"
 	"sync"
 
 	"github.com/chzyer/readline"
@@ -32,12 +32,12 @@ func NewConsole() *Console {
 	})
 
 	rl.Config.AutoComplete = readline.NewPrefixCompleter(
-    readline.PcItem("show"),
-    readline.PcItem("hmap"),
-    readline.PcItem("delete"),
-    readline.PcItem("update"),
-    readline.PcItem("insert"),
-    readline.PcItem("exit"),
+		readline.PcItem("show"),
+		readline.PcItem("hmap"),
+		readline.PcItem("delete"),
+		readline.PcItem("update"),
+		readline.PcItem("insert"),
+		readline.PcItem("exit"),
 	)
 	if err != nil {
 		panic(err)
@@ -57,7 +57,6 @@ func (c *Console) Log(level string, msg string) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	// создаем событие нужного уровня
 	event := c.Logger.Info()
 	switch level {
 	case "debug":
@@ -71,14 +70,11 @@ func (c *Console) Log(level string, msg string) {
 	}
 	event.Msg(msg)
 
-	// readline умеет безопасно выводить текст поверх текущей строки
 	if c.RL != nil {
 		c.RL.Write([]byte("\r"))
-		//c.RL.Write([]byte(fmt.Sprintf("\r%s\n", msg)))
 	}
 }
 
-// Prompt читает строку с историей и стрелочками
 func (c *Console) Prompt() (string, error) {
 	line, err := c.RL.Readline()
 	if err != nil {
@@ -89,4 +85,3 @@ func (c *Console) Prompt() (string, error) {
 	}
 	return line, nil
 }
-

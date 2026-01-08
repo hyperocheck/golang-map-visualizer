@@ -2,10 +2,11 @@ package preview
 
 import (
 	"fmt"
-	"github.com/fatih/color"
 	"math/rand"
 	"strings"
 	"time"
+
+	"github.com/fatih/color"
 )
 
 var preview7 = `

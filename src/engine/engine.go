@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
-	"log"
 	"reflect"
 	"strconv"
 	"unsafe"
@@ -21,7 +20,7 @@ type Parseable[T any] interface {
 }
 
 func ParseValue[T any](s string) (T, error) {
-	var zero T 
+	var zero T
 
 	if p, ok := any(zero).(Parseable[T]); ok {
 		return p.Parse(s)
@@ -40,6 +39,10 @@ func parseStringToType[T any](s string) (T, error) {
 	case int:
 		v, err := strconv.Atoi(s)
 		return any(v).(T), err
+	case *int:
+		v, err := strconv.Atoi(s)
+		if err != nil {return zero, err}
+		return any(&v).(T), nil
 	case int8:
 		v, err := strconv.ParseInt(s, 10, 8)
 		return any(int8(v)).(T), err
@@ -81,13 +84,13 @@ func parseStringToType[T any](s string) (T, error) {
 	}
 }
 
-func Start[K comparable, V any](factory func(iters int, maxChain bool) map[K]V) *Type[K, V] {
-	iters := flag.Int("range", 0, "range")
-	maxChain := flag.Bool("max-chain", false, "hz cho eto budet potom pridumayou")
+func Start[K comparable, V any](factory func(i_from, i_to int) map[K]V) *Type[K, V] {
+	i_from := flag.Int("from", 0, "range from")
+	i_to := flag.Int("to", 0, "range to")
 
 	flag.Parse()
 
-	userMap := factory(*iters, *maxChain)
+	userMap := factory(*i_from, *i_to)
 
 	return &Type[K, V]{
 		Data: userMap,
@@ -193,7 +196,7 @@ func (t *Type[K, V]) GetBucketsJSON(bucketsType string) []byte {
 		}
 		mainID++
 	}
-	
+
 	mapo_types := GetKVType(t)
 	resp := VizualResponse{
 		Buckets: allBuckets,
@@ -203,8 +206,8 @@ func (t *Type[K, V]) GetBucketsJSON(bucketsType string) []byte {
 			MaxChainBucketID: bucketIDMaxOverflowChainLen,
 			NumChains:        chainsNum,
 			NumEmptyBuckets:  emptyBucketsNum,
-			KeyType: mapo_types[0],
-			ValueType: mapo_types[1],
+			KeyType:          mapo_types[0],
+			ValueType:        mapo_types[1],
 		},
 	}
 
@@ -218,21 +221,17 @@ func (t *Type[K, V]) GetBucketsJSON(bucketsType string) []byte {
 func fillBucket[K comparable, V any](b *bucketJSON, rb *_bucket_[K, V]) bool {
 	emptyKeyNum := 0
 	for j := 0; j < 8; j++ {
-		// Если слот пустой (tophash < 5)
 		if rb.tophash[j] < 5 {
 			emptyKeyNum++
 			b.Keys[j] = nil
 			b.Values[j] = nil
 		} else {
-			// Маршалим ключ напрямую из структуры бакета
 			if kBytes, err := json.Marshal(rb.keys[j]); err == nil {
 				b.Keys[j] = json.RawMessage(kBytes)
 			} else {
-				// Если ошибка (маловероятно), записываем как ошибку
 				b.Keys[j] = json.RawMessage(`"error marshalling"`)
 			}
 
-			// Маршалим значение
 			if vBytes, err := json.Marshal(rb.values[j]); err == nil {
 				b.Values[j] = json.RawMessage(vBytes)
 			} else {
@@ -240,7 +239,6 @@ func fillBucket[K comparable, V any](b *bucketJSON, rb *_bucket_[K, V]) bool {
 			}
 		}
 	}
-	// Возвращаем true, если весь бакет пуст (все 8 слотов)
 	return emptyKeyNum == 8
 }
 
@@ -293,6 +291,7 @@ func (t *Type[K, V]) GetHmap() *Hmap {
 	return *(**Hmap)(unsafe.Pointer(&t.Data))
 }
 
+/*
 func (t *Type[K, V]) Generate() {
 
 	h := (**Hmap)(unsafe.Pointer(&t.Data))
@@ -325,6 +324,7 @@ func (t *Type[K, V]) Generate() {
 	log.Println("max_chain_lenght: ", cmax)
 	log.Println("max_chain: ", mstr)
 }
+*/ 
 
 func GetKVType[K comparable, V any](t *Type[K, V]) [2]string {
 	var out [2]string
@@ -369,29 +369,3 @@ func (t *Type[K, V]) PrintHmap() {
 	}
 }
 
-func printHmap(h *Hmap) {
-	magneta := color.New(color.FgMagenta)
-
-	magneta.Printf("Hmap {")
-	fmt.Printf(`
-	count       %v 
-	flags       %v
-	B           %v -> num_buckets=%v 
-	noverflow   %v 
-	hash0       %v
-	buckets     0x%x
-	oldbuckets  0x%x 
-	nevacuate   %v
-	extra       %x`,
-		h.count,
-		h.flags,
-		h.B, uintptr(1)<<(*h).B,
-		h.noverflow,
-		h.hash0,
-		h.buckets,
-		h.oldbuckets,
-		h.nevacuate,
-		h.extra,
-	)
-	color.Magenta("\n}")
-}
