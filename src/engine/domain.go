@@ -1,7 +1,9 @@
 package engine
 
-import "unsafe"
-import "encoding/json"
+import (
+	"unsafe"
+	"encoding/json"
+)
 
 type BucketStats struct {
 	LoadFactor       float64 `json:"loadFactor"`
@@ -40,32 +42,27 @@ type hmapJSON struct {
 	Buckets    string   `json:"buckets"`
 	OldBuckets string   `json:"oldbuckets"`
 	NEvacuate  uintptr  `json:"nevacuate"`
-	Extra      []string `json:"extra,omitempty"`
+	Extra      []string `json:"extra"`
 	IsGrowing  bool     `json:"isgrowing"`
 }
 
-// только для мап у которых и key и value типы не ссылочные
-// например map[int32]bool{} map[float64]my_struct{}, где my_struct{i1 int32, i2 int32, i3 byte}
-// Зачем? оптимизация для GC: в каждом бакете есть ссыока в любом случае - это overflow
-// если у нас используется типы в мапе безссылочные, то нет смысла проверять их, однако overflow этому мешает - это ведь ссылка
-// поэтому бакеты в таких типах помечается как те, что проверять GC не нужно.
-// но появляется проблема проёба самой ссылки overflow, поэтому их просто дублируют в отдельный массив в mapextra
-// это такое компромисс между скоростью gc и доп выделяемой памяти, или сканировать все бакеты, или вынести в отдельный слайс ссылки overflow
 type mapextra struct {
 	overflow     *[]*bmap
 	oldoverflow  *[]*bmap
-	nextOverflow *bmap // это пул свободных оверфлоу бакетов, чтобы можно было быстро их взять и переиспользовать
-}
-
-type mapextraJSON struct {
-	Overflow     []uintptr `json:"overflow,omitempty"`
-	OldOverflow  []uintptr `json:"oldoverflow,omitempty"`
-	NextOverflow uintptr   `json:"nextOverflow,omitempty"`
+	nextOverflow *bmap 
 }
 
 type bmap struct {
 	tophash [8]uint8
 }
+
+/*
+type mapextraJSON struct {
+	Overflow     []uintptr `json:"overflow,omitempty"`
+	OldOverflow  []uintptr `json:"oldoverflow,omitempty"`
+	NextOverflow uintptr   `json:"nextOverflow,omitempty"`
+}
+*/
 
 type _bucket_[K comparable, V any] struct {
 	tophash  [8]uint8
@@ -78,8 +75,8 @@ type bucketJSON struct {
 	Tophash  [8]uint8           `json:"tophash"`
 	Keys     [8]json.RawMessage `json:"keys,omitempty"`
 	Values   [8]json.RawMessage `json:"values,omitempty"`
-	Overflow string             `json:"overflow"` // просто для визуализации адреса типа 0x......
+	Overflow string             `json:"overflow"`  
 
 	Type string `json:"type"` // main || overflow
-	ID   int    `json:"id"`   // просто на всякий случай, может на фронте это будет нужно
+	ID   int    `json:"id"`   // main bucket id (bid)
 }

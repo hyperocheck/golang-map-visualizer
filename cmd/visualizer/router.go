@@ -21,6 +21,8 @@ func startServer[K comparable, V any](t *engine.Type[K, V], port string) error {
 	mux.HandleFunc("/vizual", t.VisualHandler)
 	mux.HandleFunc("/vizual_old", t.VisualOldHandler)
 	mux.HandleFunc("/hmap", t.HmapHandler)
+	mux.HandleFunc("/delete_key", t.DeleteKey)
+	mux.HandleFunc("/update_key", t.UpdateKey)
 	mux.Handle("/", http.FileServer(http.Dir("frontend/dist")))
 	mux.HandleFunc("/ws", ws.Handler)
 
