@@ -6,20 +6,24 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"visualizer/src/cmd"
 )
 
-func main() {
 
+func main() {
 	// Create your map here and be sure to return it.
 	// You can do anything with the map inside this block.
 	// And also don't forget to specify the return type.
-	fn := func(i_from, i_to int) map[int]int { // <- TYPE
+	fn := func() map[int]int { // <- TYPE
 
 		m := make(map[int]int)
-
-		for i := i_from; i < i_to; i++ {
+				
+		for i := cmd.Flag.From; i < cmd.Flag.To; i++ {
 			m[i] = i
 		}
+
+		
 
 		return m // <- RETURN MAP
 	}
