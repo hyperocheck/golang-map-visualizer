@@ -10,8 +10,8 @@
 
 ## 🥀ToDo
 - [ ] Optimize json updates
-- [ ] Collision mode ⛓️
-- [ ] Live mode
+- [x] Collision mode ⛓️
+- [x] Live mode
 - [ ] Docker img (?)
 - [x] Сorrect display of ANY types in the visualization
 - [x] The ability to perform operations with the map directly from the visualization
