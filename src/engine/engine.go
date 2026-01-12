@@ -2,7 +2,6 @@ package engine
 
 import (
 	"encoding/json"
-	"flag"
 	"fmt"
 	"log"
 	"reflect"
@@ -101,13 +100,8 @@ func parseStringToType[T any](s string) (T, error) {
 	}
 }
 
-func Start[K comparable, V any](factory func(i_from, i_to int) map[K]V) *Type[K, V] {
-	i_from := flag.Int("from", 0, "range from")
-	i_to := flag.Int("to", 0, "range to")
-
-	flag.Parse()
-
-	userMap := factory(*i_from, *i_to)
+func Start[K comparable, V any](factory func() map[K]V) *Type[K, V] {
+	userMap := factory()
 
 	return &Type[K, V]{
 		Data: userMap,
@@ -274,7 +268,7 @@ func GetHmapJSON(h *Hmap) ([]byte, error) {
 		B:          h.B,
 		NumBuckets: NumBuckets,
 		NOverflow:  h.noverflow,
-		Hash0:      h.hash0,
+		Hash0:      h.Hash0,
 		Buckets:    fmt.Sprintf("%p", h.buckets),
 		OldBuckets: fmt.Sprintf("%p", h.oldbuckets),
 		NEvacuate:  h.nevacuate,
@@ -369,7 +363,7 @@ func (t *Type[K, V]) PrintHmap() {
 		fmt.Sprintf("  flags       %v", h.flags),
 		fmt.Sprintf("  B           %v", h.B),
 		fmt.Sprintf("  noverflow   %v", h.noverflow),
-		fmt.Sprintf("  hash0       %v", h.hash0),
+		fmt.Sprintf("  hash0       %v", h.Hash0),
 		fmt.Sprintf("  buckets     0x%x", h.buckets),
 		fmt.Sprintf("  oldbuckets  0x%x", h.oldbuckets),
 		fmt.Sprintf("  nevacuate   %v", h.nevacuate),

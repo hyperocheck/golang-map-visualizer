@@ -10,8 +10,9 @@ import (
 	"visualizer/src/preview"
 )
 
-func work[K comparable, V any](fn func(i_from, i_to int) map[K]V) {
+func work[K comparable, V any](fn func() map[K]V) {
 	usermapo := engine.Start(fn)
+	
 
 	preview.Preview()
 	usermapo.PrintHmap()
