@@ -87,17 +87,13 @@ func StartConsole[K comparable, V any](t *engine.Type[K, V]) {
 				}
 			}
 		case "range": 
-			var zerok K 
-			var zerov V 
-			if k, ok_k := any(int(0)).(K); ok_k {
-				zerok = k
-			} else {
+			//var zerok K 
+			//var zerov V 
+			if _, ok_k := any(int(0)).(K); !ok_k {
 				yellow.Println("Usage(work only with map[int]int): range <int> <int>")
 				continue
 			}
-			if v, ok_v := any(int(0)).(V); ok_v {
-				zerov = v
-			} else {
+			if _, ok_v := any(int(0)).(V); !ok_v {
 				yellow.Println("Usage(work only with map[int]int): range <int> <int>")
 				continue
 			}
@@ -112,27 +108,29 @@ func StartConsole[K comparable, V any](t *engine.Type[K, V]) {
 				yellow.Println("range FROM must be more then range TO")
 				continue
 			}
+
+			println(arg_from, arg_to)
 			
-			zerok = any(arg_from).(K)
-			zerov = any(arg_from).(V)
-			i := arg_from
+			//currentK = any(arg_from).(K)
+			//currentV = any(arg_from).(V)
+			//i := arg_from
 			update_counter := 0 
 			added_counter := 0 
-
-			for {
-				if i == arg_to {break}
-				
-				if val, ok := t.Data[zerok]; !ok {
-					added_counter++ 
-					t.Data[zerok] = zerov
-				} else {
-					if any(val).(int) == any(zerov).(int) {i++; continue;}
-					update_counter++ 
-					t.Data[zerok] = zerov
-				}
-				zerok = any(i + 1).(K)
-				zerov = any(i + 1).(V)
-				i++
+			
+			for i := arg_from; i < arg_to; i++ { 
+			    currentK := any(i).(K)
+			    currentV := any(i).(V)
+			    
+			    if val, ok := t.Data[currentK]; !ok {
+			        added_counter++
+			        t.Data[currentK] = currentV
+			    } else {
+			        if any(val).(int) == any(currentV).(int) {
+			            continue 
+			        }
+			        update_counter++
+			        t.Data[currentK] = currentV
+			    }
 			}
 
 			green.Printf("Range insert successfully: update %d, add %d\n", update_counter, added_counter)
