@@ -8,6 +8,10 @@
 
 
 
+https://github.com/user-attachments/assets/bd8e1e71-61b4-4e06-8c85-55ec2462d3f3
+
+
+
 ## 🥀ToDo
 - [ ] Optimize json updates
 - [x] Collision mode ⛓️
