@@ -6,8 +6,6 @@
 	<img src="https://img.shields.io/badge/Svelte-FF3E00?style=plastic&logo=svelte&logoColor=white" />
 </p>
 
-https://github.com/user-attachments/assets/ebbb7498-44bf-4ddf-8cc2-26e74ef0e91f
-
 ## 🥀ToDo
 - [ ] Optimize json updates
 - [x] Collision mode ⛓️
@@ -34,15 +32,14 @@ go1.23 run ./cmd/visualizer/
 To set your hash map type, you just need to change the return type inside the anonymous function in the `main` func and, of course, return the map (file: `/cmd/visualizer/main.go`). Inside this anonymous function, you can do whatever you want with the map, for example, fill it with 100_000 elements or delete half of them. Here's what it looks like:
 ```go
 func main() {
-
 	// Create your map here and be sure to return it.
 	// You can do anything with the map inside this block.
 	// And also don't forget to specify the return type.
-	fn := func(i_from, i_to int) map[int]float64 {  // <- TYPE
+	fn := func() map[int]float64 {  // <- TYPE
 
 		m := make(map[int]float64)
 
-		for i := i_from; i < i_to; i++ {
+		for i := cmd.Flag.From; i < cmf.Flag.To; i++ {
 			m[i] = float64(i)
 		}
 
@@ -55,21 +52,31 @@ func main() {
 ```
 Using the `--from` and `--to` flags, you can set the start and end of the iterator (if you want to use it at all).  
 `go1.23 run ./cmd/visualizer --from 100 --to 1000`  
-  
-Actions in visualization:
+
+CLI Arguments
+Arg | Description
+--- | ---
+`--from` | Sets the starting point for operations when explicitly called in the code
+`--to`   |  Sets the end point for operations when explicitly called in the code
+`--spectator` | 	Enables Live Mode: automatic insertion tracking. Requires `--from` and `--to`
+`--evil` | 	Enables Collision Attack mode. Requires `--from` and `--to`
+`--latency` | 	Sets the output delay(ms). Compatible with `evil` and `spectator` modes
+
+Visualization Actions
 Action |	Description
 --- | ---
-`double left click + d` |delete key
-`double left click + (change value in side menu) + u` | update key
+`Click on a buckets` | 	Displays bucket information in the side menu
+`Double-click on an active bucket key` | Displays detailed information about the selected key in the side menu
+`Double-click + d` | Deletes the selected key
+`Double-click + (change value in side menu) + u` | Updates the selected key with the value entered in the side menu
 
-  
-You have access to the cli with the following commands:
-
+Console Commands
 Command |	Description
 --- | --- 
-`show` | print map
-`hmap` | print hmap structure
-`exit` | exit from console & server down
+`show` | Prints all key-value pairs currently in the map
+`hmap` | Print hmap structure
+`exit` | Shuts down the server and exits the console.
+`range <from> <to>` | Loop through the insertion path from `from` to `to`
 `insert <k> <v>` | guess
 `update <k> <v>` | guess
 `delete <k>` | guess
@@ -151,3 +158,5 @@ func (UserCustomDataExample) Parse(s string) (UserCustomDataExample, error) {
 
 ## Easter eggs 😺
 If you want to visualize a chain of blocks with a length of at least two, then use this formula to generate a certain number of items in a bucket: `(x * 8) * 0.8125`, x is the number of buckets (any number that is a power of two (min 8) -- 8, 16, 32, 64 ...). It will work on the 10th or 20th attempt, good luck:)
+
+https://github.com/user-attachments/assets/ebbb7498-44bf-4ddf-8cc2-26e74ef0e91f
