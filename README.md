@@ -3,7 +3,6 @@
 </p>
 <p align="center">
     <img src="https://img.shields.io/badge/-1.23-brightgreen?style=plastic&logo=go&logoColor=white" />
-	<img src="https://img.shields.io/badge/Svelte-FF3E00?style=plastic&logo=svelte&logoColor=white" />
 </p>
 
 ## Todo
@@ -13,9 +12,9 @@
 - [ ] Docker img (?)
 - [x] Сorrect display of ANY types in the visualization
 - [x] The ability to perform operations with the map directly from the visualization
-- [ ] Implement map visualization for versions >1.23💀
+- [ ] Implement map visualization for versions >1.23
 - [ ] Add an endpoint with an overview of the work of the map (tutorial)
-- [ ] I need a good image for the logo 🎃
+- [ ] I need a good image for the logo
 
 ## About Project
 <img width="960" height="540" alt="{EB9CD144-2318-4688-922F-841DB8A6C077}" src="https://github.com/user-attachments/assets/6c94bb2e-5148-4a85-be9a-d71b6810e7f1" />
@@ -119,9 +118,16 @@ func (UserCustomDataExample) Parse(s string) (UserCustomDataExample, error) {
 ~~If you want to visualize a chain of blocks with a length of at least two, then use this formula to generate a certain number of items in a bucket: `(x * 8) * 0.8125`, x is the number of buckets (any number that is a power of two (min 8) -- 8, 16, 32, 64 ...). It will work on the 10th or 20th attempt, good luck:)~~ Now there is evil mode.
 
 <p align="center">
-  <a href="https://www.youtube.com/watch?v=44ZGJwwsNvE">
-    <img src="https://i.ibb.co/84SfmtH1/Picsart-26-01-13-05-24-38-452.jpg" width="900" alt="Demo video">
-  </a>
+  <table>
+    <tr>
+      <td>
+        <a href="https://www.youtube.com/watch?v=44ZGJwwsNvE">
+          <img src="./assets/preview.jpg" width="900" alt="Demo video">
+        </a>
+      </td>
+    </tr>
+  </table>
 </p>
+
 
 
