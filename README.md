@@ -118,4 +118,10 @@ func (UserCustomDataExample) Parse(s string) (UserCustomDataExample, error) {
 ## Easter eggs 😺
 ~~If you want to visualize a chain of blocks with a length of at least two, then use this formula to generate a certain number of items in a bucket: `(x * 8) * 0.8125`, x is the number of buckets (any number that is a power of two (min 8) -- 8, 16, 32, 64 ...). It will work on the 10th or 20th attempt, good luck:)~~ Now there is evil mode.
 
-https://github.com/user-attachments/assets/ebbb7498-44bf-4ddf-8cc2-26e74ef0e91f
+<p align="center">
+  <a href="https://www.youtube.com/watch?v=44ZGJwwsNvE">
+    <img src="https://i.ibb.co/84SfmtH1/Picsart-26-01-13-05-24-38-452.jpg" width="900" alt="Demo video">
+  </a>
+</p>
+
+
