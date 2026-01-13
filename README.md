@@ -6,7 +6,7 @@
 	<img src="https://img.shields.io/badge/Svelte-FF3E00?style=plastic&logo=svelte&logoColor=white" />
 </p>
 
-## 🥀ToDo
+## Todo
 - [ ] Optimize json updates
 - [x] Collision mode ⛓️
 - [x] Live mode
@@ -81,7 +81,6 @@ Command |	Description
 `update <k> <v>` | guess
 `delete <k>` | guess
 ## About custom K&V in map type (map[K]V)
-**🥀PLEASE DO NOT FORGET TO MAKE ALL STRUCT FIELDS PUBLIC🥀**    
 There are two ways to use custom types as keys and values. The __simple__ way is to just create a structure and add json tags to it. Then you will use the cli using the json input format. Something like this:
 ```go
 // --- A SIMPLE WAY TO USE CUSTOM TYPES ---
@@ -93,7 +92,7 @@ type UserCustomDataExample1 struct {
 }
 // In the CLI, it will look like this: insert 100 {"i1":10, "i2":42, "s1": [true, false, false]} 
 ```
-And __hard way__. You need to implement the Parse method for it so that you can use cli later. After all, the author can't guess how you want to enter your own structure in the insert command, right?:D For example, you want to use `int` as the key and such an interesting structure as the value 
+And __hard way__. You need to implement the Parse method for it so that you can use cli later. After all, the author can't guess how you want to enter your own structure in the insert command, right?:D For example, you want to use `int` as the key and such an `MyIterestingStruct struct` as the value 
 ```go
 type MyInterestingStuct struct {
     I1 int
@@ -101,62 +100,22 @@ type MyInterestingStuct struct {
     S1 []int
 }
 ```
-How can we insert this value into the CLI? Let's see what you can come up with! For example, you came up with the following input format for this structure:  
-`<int>,<int>;<bool, bool, ...>`  
+How can we insert this value into the CLI? For example, you came up with the following input format for this structure: `<int>,<int>;<bool, bool, ...>`  
 All that remains is to implement the Parse method for this type, which will accept our string from the CLI as input and convert it into our structure for further serialization.
 ```go
+// --- A HARD WAY TO USE CUSTOM TYPES ---
 func (UserCustomDataExample) Parse(s string) (UserCustomDataExample, error) {
 	var result UserCustomDataExample
 
 	s = strings.TrimSpace(s)
 
-	// split ints ; bools
-	parts := strings.SplitN(s, ";", 2)
-	if len(parts) != 2 {
-		return result, fmt.Errorf("expected format: <i1>,<i2>;<bool,bool,...>")
-	}
-
-	// --- parse ints ---
-	intPart := strings.Split(parts[0], ",")
-	if len(intPart) != 2 {
-		return result, fmt.Errorf("expected two ints: <i1>,<i2>")
-	}
-
-	i1, err := strconv.Atoi(strings.TrimSpace(intPart[0]))
-	if err != nil {
-		return result, fmt.Errorf("invalid i1: %w", err)
-	}
-
-	i2, err := strconv.Atoi(strings.TrimSpace(intPart[1]))
-	if err != nil {
-		return result, fmt.Errorf("invalid i2: %w", err)
-	}
-
-	// --- parse bool slice ---
-	boolPart := strings.TrimSpace(parts[1])
-	boolStrs := []string{}
-	if boolPart != "" {
-		boolStrs = strings.Split(boolPart, ",")
-	}
-
-	s1 := make([]bool, len(boolStrs))
-	for i, v := range boolStrs {
-		b, err := strconv.ParseBool(strings.TrimSpace(v))
-		if err != nil {
-			return result, fmt.Errorf("invalid bool at index %d: %w", i, err)
-		}
-		s1[i] = b
-	}
-
-	result.I1 = i1
-	result.I2 = i2
-	result.S1 = s1
+	// ... parsing your custom input format
 
 	return result, nil
 }
 ```
 
 ## Easter eggs 😺
-If you want to visualize a chain of blocks with a length of at least two, then use this formula to generate a certain number of items in a bucket: `(x * 8) * 0.8125`, x is the number of buckets (any number that is a power of two (min 8) -- 8, 16, 32, 64 ...). It will work on the 10th or 20th attempt, good luck:)
+~~If you want to visualize a chain of blocks with a length of at least two, then use this formula to generate a certain number of items in a bucket: `(x * 8) * 0.8125`, x is the number of buckets (any number that is a power of two (min 8) -- 8, 16, 32, 64 ...). It will work on the 10th or 20th attempt, good luck:)~~ Now there is evil mode.
 
 https://github.com/user-attachments/assets/ebbb7498-44bf-4ddf-8cc2-26e74ef0e91f
