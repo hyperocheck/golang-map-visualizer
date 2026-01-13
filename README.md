@@ -52,7 +52,7 @@ func main() {
 Using the `--from` and `--to` flags, you can set the start and end of the iterator (if you want to use it at all).  
 `go1.23 run ./cmd/visualizer --from 100 --to 1000`  
 
-CLI Arguments
+### CLI Arguments
 Arg | Description
 --- | ---
 `--from` | Sets the starting point for operations when explicitly called in the code
@@ -61,7 +61,7 @@ Arg | Description
 `--evil` | 	Enables Collision Attack mode. Requires `--from` and `--to`
 `--latency` | 	Sets the output delay(ms). Compatible with `evil` and `spectator` modes
 
-Visualization Actions
+### Visualization Actions
 Action |	Description
 --- | ---
 `Click on a buckets` | 	Displays bucket information in the side menu
@@ -69,7 +69,7 @@ Action |	Description
 `Double-click + d` | Deletes the selected key
 `Double-click + (change value in side menu) + u` | Updates the selected key with the value entered in the side menu
 
-Console Commands
+### Console Commands
 Command |	Description
 --- | --- 
 `show` | Prints all key-value pairs currently in the map
