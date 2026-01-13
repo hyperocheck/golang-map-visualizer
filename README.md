@@ -6,11 +6,7 @@
 	<img src="https://img.shields.io/badge/Svelte-FF3E00?style=plastic&logo=svelte&logoColor=white" />
 </p>
 
-
-
-https://github.com/user-attachments/assets/bd8e1e71-61b4-4e06-8c85-55ec2462d3f3
-
-
+https://github.com/user-attachments/assets/ebbb7498-44bf-4ddf-8cc2-26e74ef0e91f
 
 ## 🥀ToDo
 - [ ] Optimize json updates
