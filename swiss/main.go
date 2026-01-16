@@ -2,6 +2,7 @@ package main
 
 import "unsafe"
 import "fmt"
+import "math/rand"
 
 type Map struct {
 	used uint64 // то же самое что count
@@ -70,28 +71,66 @@ type table struct {
 	groups groupsReference
 }
 
+
 func main() {
 
 	m := map[int]int{}
-	m[1] = 4444444444
-	m[2] = 4444444444
-	m[3] = 4444444444
-	m[4] = 4444444444
-
-	m[5] = 4444444444
-	m[6] = 4444444444
-	m[7] = 4444444444
-	m[8] = 4444444444
-
-	// m[9] = 4444444444 <- grow
-
+	i := 0
 	hmap := *(**Map)(unsafe.Pointer(&m))
 
-	if hmap.dirLen == 0 { // smallmap opt - dirPtr is pointer to a single group
-		g := (*group[int, int])(hmap.dirPtr)
-		fmt.Println(g)
-		
+	for i != 256 {
+	m[i] = i
+	i++ 
+
+	if rand.Intn(2) == 1 {
+		delete(m, rand.Intn(i))
 	}
 
-	fmt.Println(hmap)
+	if hmap.dirLen == 0 {
+		fmt.Println("--- Small Map Optimization ---")
+		g := (*group[int, int])(hmap.dirPtr)
+		printGroup(g)
+	} else {
+		fmt.Printf("--- Directory Mode (len: %d) ---\n", hmap.dirLen)
+		
+		tables := unsafe.Slice((**table)(hmap.dirPtr), hmap.dirLen)
+		seenTables := make(map[*table]bool)
+
+		for i, tbl := range tables {
+			if tbl == nil || seenTables[tbl] {
+				continue
+			}
+			seenTables[tbl] = true
+			fmt.Printf("table #%d (addr: %p, used: %d):\n", i, tbl, tbl.used)
+
+
+			numGroups := int(tbl.groups.lengthMask + 1)
+			
+			groups := unsafe.Slice((*group[int, int])(tbl.groups.data), numGroups)
+
+			for gIdx, g := range groups {
+				fmt.Printf("  -- Group %d --\n", gIdx)
+    			printGroup(&g) 
+			}
+		}
+	}
+	}
 }
+
+func printGroup[K comparable, V any](g *group[K, V]) {
+	ctrlBytes := (*[8]uint8)(unsafe.Pointer(&g.ctrls))
+
+	for i := 0; i < 8; i++ {
+		ctrl := ctrlBytes[i]
+		
+		if ctrl == 0x80 {
+			fmt.Printf("  slot %d: empty\n", i)
+		} else if ctrl == 0xFE {
+			fmt.Printf("  slot %d: tombstone\n", i)
+		} else {
+			s := g.slots[i]
+			fmt.Printf("  slot %d: key: %v, val: %v (ctrl: %02x)\n", i, s.key, s.elem, ctrl)
+		}
+	}
+}
+
