@@ -6,14 +6,20 @@
 </p>
 
 ## Todo
-- [ ] Optimize json updates
-- [x] Collision mode ⛓️
-- [x] Live mode
-- [ ] Docker img (?)
-- [x] Сorrect display of ANY types in the visualization
-- [x] The ability to perform operations with the map directly from the visualization
-- [ ] Implement map visualization for versions >1.23
-- [ ] Add an endpoint with an overview of the work of the map (tutorial)
+- [ ] Optimize json updates (old map)
+- [ ] Preview mode for the evacuation process (watch where the key goes) (old map)
+- [ ] A serializer for unsupported types with a default encoder (encoding/json), f.e. channels
+- [ ] A more user-friendly interface
+- [x] Collision mode (old map)
+- [ ] Collision mode (new map)
+- [ ] Live mode (new map)
+- [ ] Probing mode (new map)
+- [x] Live mode (old map)
+- [ ] ~~Docker img (?)~~
+- [x] Сorrect display of ANY types in the visualization (old map)
+- [x] The ability to perform operations with the map directly from the visualization (old map)
+- [ ] Implement map visualization for versions >1.23 (in progress -> __branch swisstables__) (new map)
+- [ ] Add an endpoint with an overview of the work of the map (tutorial) 
 - [ ] I need a good image for the logo
 
 ## About Project
