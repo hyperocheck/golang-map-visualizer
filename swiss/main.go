@@ -53,7 +53,7 @@ func main() {
 		fmt.Println(*maptype)
 	}
 
-	for i := range 10 {
+	for i := range 900 {
 		m[i] = i
 	}
 
