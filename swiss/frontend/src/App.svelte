@@ -22,6 +22,8 @@
   const groupGapX = 40
   const tableGapY = 60
   const groupRadius = 8
+  const addrBlockWidth = 80 // ширина блока адреса
+  const addrBlockGap = 100 // отступ между адресом и таблицей
 
   function base64ToBytes(base64) {
     const binary = atob(base64)
@@ -89,11 +91,25 @@
 
     let currentY = 40
 
+    // Группируем таблицы по адресам
+    const tablesByAddr = new Map()
     for (let tableIdx = 0; tableIdx < data.tables.length; tableIdx++) {
       const table = data.tables[tableIdx]
-      const tableColor = getRandomTableColor(tableIdx)
+      const addr = table.addr
       
-      let currentX = 40
+      if (!tablesByAddr.has(addr)) {
+        tablesByAddr.set(addr, { table, indices: [tableIdx] })
+      } else {
+        tablesByAddr.get(addr).indices.push(tableIdx)
+      }
+    }
+
+    // Рисуем уникальные таблицы
+    let uniqueTableIdx = 0
+    for (const [addr, { table, indices }] of tablesByAddr) {
+      const tableColor = getRandomTableColor(uniqueTableIdx)
+      
+      let currentX = 40 + addrBlockWidth + addrBlockGap
       const tableStartX = currentX - 20
       const tableStartY = currentY - 20
       
@@ -110,7 +126,7 @@
         tableHeight = Math.max(tableHeight, groupHeight)
       }
       
-      tableWidth = tableWidth - groupGapX + 40 // убираем последний gap и добавляем отступ
+      tableWidth = tableWidth - groupGapX + 40
       tableHeight = tableHeight + 40
 
       // Рисуем рамку таблицы
@@ -122,8 +138,57 @@
       ctx.fill()
       ctx.stroke()
 
+      // Рисуем адресные блоки для всех индексов, указывающих на эту таблицу
+      for (let i = 0; i < indices.length; i++) {
+        const addrX = 40
+        const addrY = tableStartY + (i * (tableHeight / indices.length))
+        const addrHeight = indices.length > 1 ? tableHeight / indices.length - 10 : tableHeight
+        
+        // Блок адреса
+        ctx.fillStyle = tableColor.bg
+        ctx.strokeStyle = tableColor.border
+        ctx.lineWidth = 2 / Math.min(scaleX, scaleY)
+        ctx.beginPath()
+        ctx.roundRect(addrX, addrY, addrBlockWidth, addrHeight, 8)
+        ctx.fill()
+        ctx.stroke()
+        
+        // Текст адреса (вертикально)
+        ctx.save()
+        ctx.translate(addrX + addrBlockWidth / 2, addrY + addrHeight / 2)
+        ctx.rotate(-Math.PI / 2)
+        ctx.font = 'bold 12px monospace'
+        ctx.fillStyle = tableColor.border
+        ctx.textAlign = 'center'
+        ctx.textBaseline = 'middle'
+        ctx.fillText(`0x${addr.toString(16)}`, 0, 0)
+        ctx.restore()
+        
+        // Стрелка от адреса к таблице
+        const arrowStartX = addrX + addrBlockWidth
+        const arrowStartY = addrY + addrHeight / 2
+        const arrowEndX = tableStartX - 5
+        const arrowEndY = arrowStartY
+        
+        ctx.strokeStyle = tableColor.border
+        ctx.lineWidth = 2 / Math.min(scaleX, scaleY)
+        ctx.beginPath()
+        ctx.moveTo(arrowStartX, arrowStartY)
+        ctx.lineTo(arrowEndX, arrowEndY)
+        ctx.stroke()
+        
+        // Наконечник стрелки
+        ctx.fillStyle = tableColor.border
+        ctx.beginPath()
+        ctx.moveTo(arrowEndX, arrowEndY)
+        ctx.lineTo(arrowEndX - 8, arrowEndY - 5)
+        ctx.lineTo(arrowEndX - 8, arrowEndY + 5)
+        ctx.closePath()
+        ctx.fill()
+      }
+
       // Рисуем группы
-      currentX = 40
+      currentX = 40 + addrBlockWidth + addrBlockGap
 
       for (const group of table.groups) {
         const ctrls = base64ToBytes(group.ctrls)
@@ -205,7 +270,9 @@
         currentX += groupWidth + groupGapX
       }
 
-      currentY += padding + ctrlCellSize + 16 * slotHeight + padding + tableGapY
+      // Переходим к следующей таблице по вертикали
+      currentY += tableHeight + tableGapY
+      uniqueTableIdx++
     }
   }
 
