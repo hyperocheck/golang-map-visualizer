@@ -6,6 +6,7 @@ frontend/*
 
 swiss/frontend/*
 !swiss/frontend/src
+!swiss/frontend/public
 !swiss/frontend/dist
 
 # node
