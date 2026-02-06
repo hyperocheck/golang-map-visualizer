@@ -1,13 +1,11 @@
 # frontend
 
 frontend/*
-!frontend/src/main.js 
-!frontend/src/App.svelte
+!frontend/src 
 !frontend/dist
 
 swiss/frontend/*
-!swiss/frontend/src/main.js 
-!swiss/frontend/src/App.svelte
+!swiss/frontend/src
 !swiss/frontend/dist
 
 # node
