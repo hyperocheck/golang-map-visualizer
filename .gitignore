@@ -1,11 +1,14 @@
 # frontend
-frontend/node_modules/
-frontend/.vite/
-frontend/index.html
-frontend/package.json
-frontend/vite.config.mjs
-frontend/package-lock.json
-frontend/.prettierrc
+
+frontend/*
+!frontend/src/main.js 
+!frontend/src/App.svelte
+!frontend/dist
+
+swiss/frontend/*
+!swiss/frontend/src/main.js 
+!swiss/frontend/src/App.svelte
+!swiss/frontend/dist
 
 # node
 npm-debug.log
