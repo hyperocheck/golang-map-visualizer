@@ -44,7 +44,7 @@ type SlotDTO struct {
 }
 
 func main() {
-	m := map[int]int{}
+	m := map[int]string{}
 	hmap := *(**Map)(unsafe.Pointer(&m))
 
 	if maptype == nil {
@@ -53,8 +53,8 @@ func main() {
 		fmt.Println(*maptype)
 	}
 
-	for i := range 900 {
-		m[i] = i
+	for i := range 1800 {
+		m[i] = fmt.Sprintf("string %d", i)
 	}
 
 	out := MapDTO{}
@@ -72,7 +72,7 @@ func main() {
 	uniq_tables := map[uintptr]struct{}{}
 
 	if hmap.dirLen == 0 {
-		g := (*group[int, int])(hmap.dirPtr)
+		g := (*group[int, string])(hmap.dirPtr)
 
 		gOut := GroupDTO{
 			Ctrls: make([]uint8, 8),
@@ -91,6 +91,8 @@ func main() {
 		out.SmallGroup = &gOut
 	} else {
 		tables := unsafe.Slice((**table)(hmap.dirPtr), hmap.dirLen)
+
+		fmt.Println(tables)
 
 		out.Tables = make([]TableDTO, 0, len(tables))
 
@@ -115,7 +117,7 @@ func main() {
 			groupCount := int(t.groups.lengthMask + 1)
 
 			groups := unsafe.Slice(
-				(*group[int, int])(t.groups.data),
+				(*group[int, string])(t.groups.data),
 				groupCount,
 			)
 
@@ -143,13 +145,14 @@ func main() {
 		}
 	}
 
-	data, err := json.MarshalIndent(out, "", " ")
+	// data, err := json.MarshalIndent(out, "", " ")
+	data, err := json.Marshal(out)
 	if err != nil {
 		log.Println(err)
 		return
 	}
 
-	fmt.Println(string(data))
+	// fmt.Println(string(data))
 
 	router := http.NewServeMux()
 
