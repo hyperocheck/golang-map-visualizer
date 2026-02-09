@@ -53,7 +53,7 @@ func main() {
 		fmt.Println(*maptype)
 	}
 
-	for i := range 1800 {
+	for i := range 7000 {
 		m[i] = fmt.Sprintf("string %d", i)
 	}
 

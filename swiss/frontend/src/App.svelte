@@ -1,369 +1,477 @@
 <script>
   import { onMount } from 'svelte'
 
-  let canvas
-  let ctx
+  let canvas, ctx
   let dpr = window.devicePixelRatio || 1
-
   let data = null
 
-  // Состояние viewBox для навигации
   let vb = { x: 0, y: 0, w: 2000, h: 1500 }
-  
-  // Состояние панорамирования
+
   let isPanning = false
   let lastMouseX = 0
   let lastMouseY = 0
 
-  // Константы для отрисовки
+  // Состояние наведения
+  let hoveredTable = null
+  let hoveredGroup = null
+  let hoveredSlot = null
+  let mouseCanvasX = 0
+  let mouseCanvasY = 0
+
   const ctrlCellSize = 27
   const slotHeight = 22
   const padding = 12
   const groupGapX = 40
   const tableGapY = 60
   const groupRadius = 8
-  const addrBlockWidth = 80 // ширина блока адреса
-  const addrBlockGap = 100 // отступ между адресом и таблицей
+  const addrBlockWidth = 80
+  const addrBlockGap = 100
 
-  function base64ToBytes(base64) {
-    const binary = atob(base64)
-    const bytes = new Uint8Array(binary.length)
-    for (let i = 0; i < binary.length; i++) {
-      bytes[i] = binary.charCodeAt(i)
-    }
-    return Array.from(bytes)
+  function base64ToBytes(b64) {
+    return Array.from(atob(b64), c => c.charCodeAt(0))
   }
 
-  function isEmptySlot(ctrlByte) {
-    return ctrlByte === 0x80 || ctrlByte === 128
+  function isEmptySlot(b) {
+    return b === 0x80 || b === 128
   }
 
-  // Генерация случайного пастельного цвета для таблицы
-  function getRandomTableColor(index) {
-    const colors = [
-      { bg: 'rgba(255, 200, 200, 0.15)', border: 'rgba(255, 100, 100, 0.6)' }, // красный
-      { bg: 'rgba(200, 220, 255, 0.15)', border: 'rgba(100, 150, 255, 0.6)' }, // синий
-      { bg: 'rgba(200, 255, 200, 0.15)', border: 'rgba(100, 200, 100, 0.6)' }, // зеленый
-      { bg: 'rgba(255, 220, 200, 0.15)', border: 'rgba(255, 150, 100, 0.6)' }, // оранжевый
-      { bg: 'rgba(230, 200, 255, 0.15)', border: 'rgba(180, 100, 255, 0.6)' }, // фиолетовый
-      { bg: 'rgba(255, 255, 200, 0.15)', border: 'rgba(200, 200, 100, 0.6)' }, // желтый
-      { bg: 'rgba(200, 255, 255, 0.15)', border: 'rgba(100, 200, 200, 0.6)' }, // циан
+  function tableColor(i) {
+    const c = [
+      { bg: 'rgba(255,200,200,0.15)', border: 'rgba(255,100,100,0.6)' },
+      { bg: 'rgba(200,220,255,0.15)', border: 'rgba(100,150,255,0.6)' },
+      { bg: 'rgba(200,255,200,0.15)', border: 'rgba(100,200,100,0.6)' }
     ]
-    return colors[index % colors.length]
+    return c[i % c.length]
+  }
+
+  function isVisible(x, y, w, h) {
+    return !(
+      x + w < vb.x ||
+      x > vb.x + vb.w ||
+      y + h < vb.y ||
+      y > vb.y + vb.h
+    )
+  }
+
+  function isPointInRect(px, py, x, y, w, h) {
+    return px >= x && px <= x + w && py >= y && py <= y + h
   }
 
   async function loadData() {
-    try {
-      const response = await fetch('/data')
-      if (!response.ok) {
-        console.error('Failed to load data:', response.statusText)
-        return
-      }
-      data = await response.json()
-      drawVisualization()
-    } catch (err) {
-      console.error('Error loading data:', err)
-    }
+    data = await (await fetch('/data')).json()
+    draw()
   }
 
-  function drawVisualization() {
-    if (!ctx || !data || !data.tables) return
+  function draw() {
+    if (!ctx || !data) return
 
-    const container = canvas.parentElement
-    const rect = container.getBoundingClientRect()
+    const r = canvas.parentElement.getBoundingClientRect()
+    canvas.width = r.width * dpr
+    canvas.height = r.height * dpr
 
-    canvas.width = rect.width * dpr
-    canvas.height = rect.height * dpr
-    
-    // Сбрасываем трансформацию
     ctx.setTransform(1, 0, 0, 1, 0, 0)
     ctx.clearRect(0, 0, canvas.width, canvas.height)
     ctx.scale(dpr, dpr)
 
-    // Применяем трансформацию viewBox
-    const scaleX = rect.width / vb.w
-    const scaleY = rect.height / vb.h
-    const offsetX = -vb.x * scaleX
-    const offsetY = -vb.y * scaleY
-    
-    ctx.translate(offsetX, offsetY)
-    ctx.scale(scaleX, scaleY)
+    const sx = r.width / vb.w
+    const sy = r.height / vb.h
+    ctx.translate(-vb.x * sx, -vb.y * sy)
+    ctx.scale(sx, sy)
 
     let currentY = 40
 
-    // Группируем таблицы по адресам
-    const tablesByAddr = new Map()
-    for (let tableIdx = 0; tableIdx < data.tables.length; tableIdx++) {
-      const table = data.tables[tableIdx]
-      const addr = table.addr
-      
-      if (!tablesByAddr.has(addr)) {
-        tablesByAddr.set(addr, { table, indices: [tableIdx] })
-      } else {
-        tablesByAddr.get(addr).indices.push(tableIdx)
-      }
-    }
+    const map = new Map()
+    data.tables.forEach((t, i) => {
+      if (!map.has(t.addr)) map.set(t.addr, { table: t, indices: [] })
+      map.get(t.addr).indices.push(i)
+    })
 
-    // Рисуем уникальные таблицы
-    let uniqueTableIdx = 0
-    for (const [addr, { table, indices }] of tablesByAddr) {
-      const tableColor = getRandomTableColor(uniqueTableIdx)
-      
-      let currentX = 40 + addrBlockWidth + addrBlockGap
-      const tableStartX = currentX - 20
-      const tableStartY = currentY - 20
-      
-      // Вычисляем размеры таблицы
-      let tableWidth = 0
-      let tableHeight = 0
-      
-      for (const group of table.groups) {
-        const ctrls = base64ToBytes(group.ctrls)
-        const groupWidth = ctrls.length * ctrlCellSize + padding * 2
-        const groupHeight = padding + ctrlCellSize + 16 * slotHeight + padding
-        
-        tableWidth += groupWidth + groupGapX
-        tableHeight = Math.max(tableHeight, groupHeight)
-      }
-      
-      tableWidth = tableWidth - groupGapX + 40
-      tableHeight = tableHeight + 40
+    let idx = 0
+    let newHoveredTable = null
+    let newHoveredGroup = null
+    let newHoveredSlot = null
 
-      // Рисуем рамку таблицы
-      ctx.fillStyle = tableColor.bg
-      ctx.strokeStyle = tableColor.border
-      ctx.lineWidth = 3 / Math.min(scaleX, scaleY)
+    for (const [addr, { table, indices }] of map) {
+      const col = tableColor(idx)
+
+      let tableW = 0
+      let tableH = 0
+
+      for (const g of table.groups) {
+        const ctrls = base64ToBytes(g.ctrls)
+        const gw = ctrls.length * ctrlCellSize + padding * 2
+        const gh = padding + ctrlCellSize + 16 * slotHeight + padding
+        tableW += gw + groupGapX
+        tableH = Math.max(tableH, gh)
+      }
+
+      tableW = tableW - groupGapX + 40
+      tableH += 40
+
+      const addrGapY = 20
+      const addrBlockH = tableH
+      const addrColH =
+        indices.length * addrBlockH +
+        (indices.length - 1) * addrGapY
+
+      const blockH = Math.max(tableH, addrColH)
+      const tableYOffset =
+        addrColH > tableH ? (addrColH - tableH) / 2 : 0
+
+      const tableX = 40 + addrBlockWidth + addrBlockGap - 20
+      const tableY = currentY - 20 + tableYOffset
+      const groupsY = tableY + 20
+
+      const addrColY =
+        currentY - 20 + blockH / 2 - addrColH / 2
+
+      if (!isVisible(40, currentY - 20, tableX + tableW, blockH)) {
+        currentY += blockH + tableGapY
+        idx++
+        continue
+      }
+
+      // Проверка наведения на таблицу
+      const isTableHovered = isPointInRect(mouseCanvasX, mouseCanvasY, tableX, tableY, tableW, tableH)
+      if (isTableHovered) {
+        newHoveredTable = idx
+      }
+
+      // TABLE FRAME
+      ctx.fillStyle = col.bg
+      ctx.strokeStyle = isTableHovered ? '#4169E1' : col.border
+      ctx.lineWidth = isTableHovered ? 4 / Math.min(sx, sy) : 3 / Math.min(sx, sy)
       ctx.beginPath()
-      ctx.roundRect(tableStartX, tableStartY, tableWidth, tableHeight, 16)
+      ctx.roundRect(tableX, tableY, tableW, tableH, 16)
       ctx.fill()
       ctx.stroke()
 
-      // Рисуем адресные блоки для всех индексов, указывающих на эту таблицу
-      for (let i = 0; i < indices.length; i++) {
-        const addrX = 40
-        const addrY = tableStartY + (i * (tableHeight / indices.length))
-        const addrHeight = indices.length > 1 ? tableHeight / indices.length - 10 : tableHeight
-        
-        // Блок адреса
-        ctx.fillStyle = tableColor.bg
-        ctx.strokeStyle = tableColor.border
-        ctx.lineWidth = 2 / Math.min(scaleX, scaleY)
+      // ADDR BLOCKS + ARROWS
+      indices.forEach((_, i) => {
+        const x = 40
+        const y = addrColY + i * (addrBlockH + addrGapY)
+
+        ctx.fillStyle = col.bg
+        ctx.strokeStyle = col.border
+        ctx.lineWidth = 2 / Math.min(sx, sy)
         ctx.beginPath()
-        ctx.roundRect(addrX, addrY, addrBlockWidth, addrHeight, 8)
+        ctx.roundRect(x, y, addrBlockWidth, addrBlockH, 8)
         ctx.fill()
         ctx.stroke()
-        
-        // Текст адреса (вертикально)
+
         ctx.save()
-        ctx.translate(addrX + addrBlockWidth / 2, addrY + addrHeight / 2)
+        ctx.translate(x + addrBlockWidth / 2, y + addrBlockH / 2)
         ctx.rotate(-Math.PI / 2)
-        ctx.font = 'bold 12px monospace'
-        ctx.fillStyle = tableColor.border
+        ctx.font = 'bold 28px monospace'
+        ctx.fillStyle = col.border
         ctx.textAlign = 'center'
         ctx.textBaseline = 'middle'
         ctx.fillText(`0x${addr.toString(16)}`, 0, 0)
         ctx.restore()
-        
-        // Стрелка от адреса к таблице
-        const arrowStartX = addrX + addrBlockWidth
-        const arrowStartY = addrY + addrHeight / 2
-        const arrowEndX = tableStartX - 5
-        const arrowEndY = arrowStartY
-        
-        ctx.strokeStyle = tableColor.border
-        ctx.lineWidth = 2 / Math.min(scaleX, scaleY)
+
+        const ax = x + addrBlockWidth
+        const ay = y + addrBlockH / 2
+        const bx = tableX - 6
+        const by = tableY + tableH / 2
+
+        ctx.strokeStyle = col.border
+        ctx.lineWidth = 2 / Math.min(sx, sy)
         ctx.beginPath()
-        ctx.moveTo(arrowStartX, arrowStartY)
-        ctx.lineTo(arrowEndX, arrowEndY)
+        ctx.moveTo(ax, ay)
+        ctx.lineTo(bx, by)
         ctx.stroke()
-        
-        // Наконечник стрелки
-        ctx.fillStyle = tableColor.border
+
+        const ang = Math.atan2(by - ay, bx - ax)
+        const arrowSize = 12
+        ctx.fillStyle = col.border
         ctx.beginPath()
-        ctx.moveTo(arrowEndX, arrowEndY)
-        ctx.lineTo(arrowEndX - 8, arrowEndY - 5)
-        ctx.lineTo(arrowEndX - 8, arrowEndY + 5)
+        ctx.moveTo(bx, by)
+        ctx.lineTo(
+          bx - arrowSize * Math.cos(ang - 0.4),
+          by - arrowSize * Math.sin(ang - 0.4)
+        )
+        ctx.lineTo(
+          bx - arrowSize * Math.cos(ang + 0.4),
+          by - arrowSize * Math.sin(ang + 0.4)
+        )
         ctx.closePath()
         ctx.fill()
-      }
+      })
 
-      // Рисуем группы
-      currentX = 40 + addrBlockWidth + addrBlockGap
+      // GROUPS
+      let gx = 40 + addrBlockWidth + addrBlockGap
+      let groupIdx = 0
 
-      for (const group of table.groups) {
-        const ctrls = base64ToBytes(group.ctrls)
-        
-        // Ширина группы = ширина контрольных байтов + отступы
-        const groupWidth = ctrls.length * ctrlCellSize + padding * 2
-        
-        const groupHeight = padding + ctrlCellSize + 16 * slotHeight + padding
+      for (const g of table.groups) {
+        const ctrls = base64ToBytes(g.ctrls)
+        const gw = ctrls.length * ctrlCellSize + padding * 2
+        const gh = padding + ctrlCellSize + 16 * slotHeight + padding
 
-        // Рисуем прямоугольник группы
-        ctx.fillStyle = 'rgba(255, 255, 255, 0.8)'
-        ctx.strokeStyle = '#000'
-        ctx.lineWidth = 1.5 / Math.min(scaleX, scaleY)
+        if (!isVisible(gx, groupsY, gw, gh)) {
+          gx += gw + groupGapX
+          groupIdx++
+          continue
+        }
+
+        // Проверка наведения на группу
+        const isGroupHovered = isPointInRect(mouseCanvasX, mouseCanvasY, gx, groupsY, gw, gh)
+        if (isGroupHovered) {
+          newHoveredGroup = `${idx}-${groupIdx}`
+        }
+
+        ctx.fillStyle = 'rgba(255,255,255,0.85)'
+        ctx.strokeStyle = isGroupHovered ? '#4169E1' : '#000'
+        ctx.lineWidth = isGroupHovered ? 2.5 / Math.min(sx, sy) : 1.5 / Math.min(sx, sy)
         ctx.beginPath()
-        ctx.roundRect(currentX, currentY, groupWidth, groupHeight, groupRadius)
+        ctx.roundRect(gx, groupsY, gw, gh, groupRadius)
         ctx.fill()
         ctx.stroke()
 
-        // Рисуем контрольные байты
-        let ctrlX = currentX + padding
-        let ctrlY = currentY + padding
+        let cx = gx + padding
+        let cy = groupsY + padding
 
-        for (let i = 0; i < ctrls.length; i++) {
-          const ctrl = ctrls[i]
-          const isEmpty = isEmptySlot(ctrl)
-
-          ctx.fillStyle = isEmpty ? '#ddd' : '#a8dadc'
+        const ctrlsLen = ctrls.length
+        for (let i = 0; i < ctrlsLen; i++) {
+          const c = ctrls[i]
+          ctx.fillStyle = isEmptySlot(c) ? '#ddd' : '#a8dadc'
           ctx.strokeStyle = '#000'
-          ctx.lineWidth = 1 / Math.min(scaleX, scaleY)
-
-          ctx.fillRect(ctrlX, ctrlY, ctrlCellSize, ctrlCellSize)
-          ctx.strokeRect(ctrlX, ctrlY, ctrlCellSize, ctrlCellSize)
+          ctx.lineWidth = 1 / Math.min(sx, sy)
+          ctx.fillRect(cx, cy, ctrlCellSize, ctrlCellSize)
+          ctx.strokeRect(cx, cy, ctrlCellSize, ctrlCellSize)
 
           ctx.font = '11px monospace'
           ctx.fillStyle = '#000'
           ctx.textAlign = 'center'
           ctx.textBaseline = 'middle'
-          ctx.fillText(ctrl.toString(), ctrlX + ctrlCellSize / 2, ctrlY + ctrlCellSize / 2)
+          ctx.fillText(c.toString(), cx + ctrlCellSize / 2, cy + ctrlCellSize / 2)
 
-          ctrlX += ctrlCellSize
+          cx += ctrlCellSize
         }
 
-        // Рисуем слоты (k, v пары)
-        let slotY = currentY + padding + ctrlCellSize
+        let slotY = cy + ctrlCellSize
+        const scale = Math.min(sx, sy)
+        const showDetails = scale > 0.3
 
-        for (let i = 0; i < group.slots.length; i++) {
-          const slot = group.slots[i]
-          const ctrl = ctrls[i]
-          const isEmpty = isEmptySlot(ctrl)
+        for (let i = 0; i < ctrlsLen; i++) {
+          const empty = isEmptySlot(ctrls[i])
+          const s = g.slots[i]
 
-          // Key
-          ctx.fillStyle = isEmpty ? '#dbfdc9' : '#b2f2bb'
-          ctx.strokeStyle = '#12b886'
-          ctx.lineWidth = 1 / Math.min(scaleX, scaleY)
-          ctx.fillRect(currentX + padding, slotY, groupWidth - padding * 2, slotHeight)
-          ctx.strokeRect(currentX + padding, slotY, groupWidth - padding * 2, slotHeight)
+          const slotId = `${idx}-${groupIdx}-${i}`
 
-          ctx.font = '12px monospace'
-          ctx.fillStyle = '#000'
-          ctx.textAlign = 'left'
-          ctx.textBaseline = 'middle'
-          ctx.fillText(`${slot.k}`, currentX + padding + 6, slotY + slotHeight / 2)
+          // Проверка наведения на key слот
+          const isKeyHovered = isPointInRect(mouseCanvasX, mouseCanvasY, gx + padding, slotY, gw - padding * 2, slotHeight)
+          if (isKeyHovered) {
+            newHoveredSlot = `${slotId}-key`
+          }
+
+          // Key row
+          let keyBg = empty ? '#e8f5e9' : '#b2f2bb'
+          let keyBorder = empty ? '#c8e6c9' : '#12b886'
+          
+          if (isKeyHovered) {
+            keyBg = empty ? '#c8e6c9' : '#69f0ae'
+            keyBorder = '#00897b'
+          }
+
+          ctx.fillStyle = keyBg
+          ctx.strokeStyle = keyBorder
+          ctx.lineWidth = isKeyHovered ? 2 / Math.min(sx, sy) : 1 / Math.min(sx, sy)
+          ctx.fillRect(gx + padding, slotY, gw - padding * 2, slotHeight)
+          ctx.strokeRect(gx + padding, slotY, gw - padding * 2, slotHeight)
+
+          if (showDetails && !empty && s) {
+            ctx.font = 'bold 12px monospace'
+            ctx.fillStyle = '#000'
+            ctx.textAlign = 'left'
+            ctx.textBaseline = 'middle'
+            ctx.fillText(String(s.k || ''), gx + padding + 6, slotY + slotHeight / 2)
+          }
 
           slotY += slotHeight
 
-          // Value
-          ctx.fillStyle = isEmpty ? '#fff2b8' : '#ffec99'
-          ctx.strokeStyle = '#ffa94d'
-          ctx.lineWidth = 1 / Math.min(scaleX, scaleY)
-          ctx.fillRect(currentX + padding, slotY, groupWidth - padding * 2, slotHeight)
-          ctx.strokeRect(currentX + padding, slotY, groupWidth - padding * 2, slotHeight)
+          // Проверка наведения на value слот
+          const isValueHovered = isPointInRect(mouseCanvasX, mouseCanvasY, gx + padding, slotY, gw - padding * 2, slotHeight)
+          if (isValueHovered) {
+            newHoveredSlot = `${slotId}-value`
+          }
 
-          ctx.fillStyle = '#000'
-          ctx.fillText(`${slot.v}`, currentX + padding + 6, slotY + slotHeight / 2)
+          // Value row
+          let valueBg = empty ? '#fff9e6' : '#ffec99'
+          let valueBorder = empty ? '#ffe0b2' : '#ffa94d'
+          
+          if (isValueHovered) {
+            valueBg = empty ? '#ffe0b2' : '#ffd54f'
+            valueBorder = '#ff8f00'
+          }
 
+          ctx.fillStyle = valueBg
+          ctx.strokeStyle = valueBorder
+          ctx.lineWidth = isValueHovered ? 2 / Math.min(sx, sy) : 1 / Math.min(sx, sy)
+          ctx.fillRect(gx + padding, slotY, gw - padding * 2, slotHeight)
+          ctx.strokeRect(gx + padding, slotY, gw - padding * 2, slotHeight)
+
+          if (showDetails && !empty && s) {
+            ctx.font = 'bold 12px monospace'
+            ctx.fillStyle = '#000'
+            ctx.textAlign = 'left'
+            ctx.textBaseline = 'middle'
+            ctx.fillText(String(s.v || ''), gx + padding + 6, slotY + slotHeight / 2)
+          }
+          
           slotY += slotHeight
         }
 
-        currentX += groupWidth + groupGapX
+        gx += gw + groupGapX
+        groupIdx++
       }
 
-      // Переходим к следующей таблице по вертикали
-      currentY += tableHeight + tableGapY
-      uniqueTableIdx++
+      currentY += blockH + tableGapY
+      idx++
+    }
+
+    // Обновляем состояние наведения
+    if (hoveredTable !== newHoveredTable || hoveredGroup !== newHoveredGroup || hoveredSlot !== newHoveredSlot) {
+      hoveredTable = newHoveredTable
+      hoveredGroup = newHoveredGroup
+      hoveredSlot = newHoveredSlot
     }
   }
 
-  // Обработка колеса мыши (зум и прокрутка)
+  let rafId = null
+  let needsRedraw = false
+
+  function scheduleRedraw() {
+    if (needsRedraw) return
+    needsRedraw = true
+    rafId = requestAnimationFrame(() => {
+      draw()
+      needsRedraw = false
+    })
+  }
+
+  // Throttle для обновления позиции мыши
+  let mouseUpdateTimeout = null
+  function updateMousePosition(e) {
+    const r = canvas.getBoundingClientRect()
+    const sx = r.width / vb.w
+    const sy = r.height / vb.h
+    
+    const mouseX = e.clientX - r.left
+    const mouseY = e.clientY - r.top
+    
+    mouseCanvasX = vb.x + mouseX / sx
+    mouseCanvasY = vb.y + mouseY / sy
+    
+    // Используем throttle только если не двигаем
+    if (!isPanning) {
+      if (mouseUpdateTimeout) return
+      mouseUpdateTimeout = setTimeout(() => {
+        mouseUpdateTimeout = null
+        scheduleRedraw()
+      }, 16) // ~60fps
+    } else {
+      scheduleRedraw()
+    }
+  }
+
+  // Debounce для wheel событий
+  let wheelTimeout = null
+  let accumulatedDeltaX = 0
+  let accumulatedDeltaY = 0
+  let lastWheelEvent = null
+
   function handleWheel(e) {
     e.preventDefault()
-    const rect = canvas.getBoundingClientRect()
     
-    if (e.ctrlKey || e.metaKey) {
-      // Zoom
-      const mouseX = e.clientX - rect.left
-      const mouseY = e.clientY - rect.top
-      
-      const svgMouseX = vb.x + (mouseX * vb.w) / rect.width
-      const svgMouseY = vb.y + (mouseY * vb.h) / rect.height
-      
-      const zoomFactor = Math.pow(1.001, e.deltaY * -2)
-      const newW = vb.w / zoomFactor
-      const newH = vb.h / zoomFactor
-      
-      if (newW < 100 || newW > 40000) return
-      
-      vb.x = svgMouseX - (mouseX / rect.width) * newW
-      vb.y = svgMouseY - (mouseY / rect.height) * newH
-      vb.w = newW
-      vb.h = newH
+    lastWheelEvent = e
+    accumulatedDeltaX += e.deltaX
+    accumulatedDeltaY += e.deltaY
+    
+    if (wheelTimeout) {
+      clearTimeout(wheelTimeout)
+    }
+    
+    wheelTimeout = setTimeout(() => {
+      processWheel(lastWheelEvent, accumulatedDeltaX, accumulatedDeltaY)
+      accumulatedDeltaX = 0
+      accumulatedDeltaY = 0
+      wheelTimeout = null
+    }, 10)
+  }
+
+  function processWheel(e, deltaX, deltaY) {
+    const r = canvas.getBoundingClientRect()
+
+    if (e.ctrlKey) {
+      const mx = e.clientX - r.left
+      const my = e.clientY - r.top
+      const z = Math.pow(1.001, -deltaY * 2)
+
+      const nw = vb.w / z
+      if (nw < 100 || nw > 40000) return
+
+      vb.x += (mx / r.width) * (vb.w - nw)
+      vb.y += (my / r.height) * (vb.h - vb.h / z)
+      vb.w = nw
+      vb.h /= z
     } else {
-      // Pan
-      vb.x += (e.deltaX * vb.w) / rect.width
-      vb.y += (e.deltaY * vb.h) / rect.height
+      vb.x += (deltaX * vb.w) / r.width
+      vb.y += (deltaY * vb.h) / r.height
     }
-    
-    drawVisualization()
+
+    updateMousePosition(e)
   }
 
-  // Обработка нажатия мыши
   function handleMouseDown(e) {
-    if (e.button === 0) {
-      isPanning = true
-      lastMouseX = e.clientX
-      lastMouseY = e.clientY
-      canvas.style.cursor = 'grabbing'
-    }
+    isPanning = true
+    lastMouseX = e.clientX
+    lastMouseY = e.clientY
+    canvas.style.cursor = 'grabbing'
   }
 
-  // Обработка отпускания мыши
   function handleMouseUp() {
     isPanning = false
     canvas.style.cursor = 'grab'
   }
 
-  // Обработка движения мыши
   function handleMouseMove(e) {
     if (isPanning) {
       const dx = e.clientX - lastMouseX
       const dy = e.clientY - lastMouseY
       lastMouseX = e.clientX
       lastMouseY = e.clientY
-      
-      const rect = canvas.getBoundingClientRect()
-      vb.x -= (dx * vb.w) / rect.width
-      vb.y -= (dy * vb.h) / rect.height
-      
-      drawVisualization()
+
+      const r = canvas.getBoundingClientRect()
+      vb.x -= (dx * vb.w) / r.width
+      vb.y -= (dy * vb.h) / r.height
     }
+    
+    updateMousePosition(e)
   }
 
   onMount(() => {
     ctx = canvas.getContext('2d')
     loadData()
 
-    // Синхронизация viewBox с размером контейнера
-    const syncViewBox = () => {
-      const container = canvas.parentElement
-      const rect = container.getBoundingClientRect()
-      const aspect = rect.height / rect.width
-      vb.h = vb.w * aspect
-      drawVisualization()
+    const sync = () => {
+      const r = canvas.parentElement.getBoundingClientRect()
+      vb.h = vb.w * (r.height / r.width)
+      scheduleRedraw()
     }
 
-    syncViewBox()
+    sync()
+    window.addEventListener('resize', sync)
 
-    window.addEventListener('resize', syncViewBox)
     return () => {
-      window.removeEventListener('resize', syncViewBox)
+      if (rafId) cancelAnimationFrame(rafId)
+      if (wheelTimeout) clearTimeout(wheelTimeout)
+      if (mouseUpdateTimeout) clearTimeout(mouseUpdateTimeout)
     }
   })
 </script>
 
 <div class="root">
-  <div 
+  <div
     class="canvas-container"
     on:wheel|nonpassive={handleWheel}
     on:mousedown={handleMouseDown}
@@ -371,10 +479,7 @@
     on:mouseup={handleMouseUp}
     on:mouseleave={handleMouseUp}
   >
-    <canvas
-      bind:this={canvas}
-      style="width: 100%; height: 100%;"
-    ></canvas>
+    <canvas bind:this={canvas}></canvas>
   </div>
 </div>
 
@@ -382,19 +487,17 @@
   .root {
     width: 100%;
     height: 100vh;
-    overflow: hidden;
     background: #ebfbee;
+    overflow: hidden;
   }
-
   .canvas-container {
     width: 100%;
     height: 100%;
-    overflow: hidden;
     cursor: grab;
-    touch-action: none;
   }
-
   canvas {
+    width: 100%;
+    height: 100%;
     display: block;
   }
 </style>
