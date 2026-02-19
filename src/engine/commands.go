@@ -2,6 +2,7 @@ package engine
 
 import (
 	"fmt"
+	"runtime"
 	"strconv"
 	"strings"
 	"time"
@@ -323,4 +324,46 @@ func (m *Meta[K, V]) registerHmap() {
 	m.Console.RegisterCommand("hmap", "hmap — show internal hmap structure", func(ctx *ishell.Context) {
 		PrintHmap2(m.Map, ctx)
 	})
+}
+
+func PrintHmap2[K comparable, V any](
+	t Map[K, V],
+	shell *ishell.Context,
+) {
+	h := GetHmap(t)
+
+	lines := []string{
+		"Hmap {",
+		fmt.Sprintf("  count       %v", h.count),
+		fmt.Sprintf("  flags       %v", h.flags),
+		fmt.Sprintf("  B           %v", h.B),
+		fmt.Sprintf("  noverflow   %v", h.noverflow),
+		fmt.Sprintf("  hash0       %v", h.Hash0),
+		fmt.Sprintf("  buckets     0x%x", h.buckets),
+		fmt.Sprintf("  oldbuckets  0x%x", h.oldbuckets),
+		fmt.Sprintf("  nevacuate   %v", h.nevacuate),
+		fmt.Sprintf("  extra       %x", h.extra),
+		"}",
+	}
+
+	isWindows := runtime.GOOS == "windows"
+
+	start := [3]int{180, 80, 255}
+	end := [3]int{80, 200, 255}
+	steps := len(lines) - 1
+
+	for i, line := range lines {
+		var colored string
+
+		if isWindows {
+			colored = fmt.Sprintf("\x1b[36m%s\x1b[0m", line)
+		} else {
+			r := start[0] + (end[0]-start[0])*i/steps
+			g := start[1] + (end[1]-start[1])*i/steps
+			b := start[2] + (end[2]-start[2])*i/steps
+			colored = fmt.Sprintf("\x1b[38;2;%d;%d;%dm%s\x1b[0m", r, g, b, line)
+		}
+
+		shell.Println(colored)
+	}
 }
