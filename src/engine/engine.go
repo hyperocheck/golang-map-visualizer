@@ -2,17 +2,42 @@ package engine
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"reflect"
+	"runtime"
 	"strconv"
+	"sync"
 	"unsafe"
+	"visualizer/src/console"
 
+	"github.com/abiosoft/ishell/v2"
 	"github.com/fatih/color"
 )
 
-type Type[K comparable, V any] struct {
-	Data map[K]V
+type (
+	Meta[K comparable, V any] struct {
+		Console      *console.Console
+		Map          map[K]V
+		bucketSizeof uintptr
+		mu           sync.Mutex
+		ktype        string
+		vtype        string
+	}
+	Map[K comparable, V any] map[K]V
+)
+
+func GetMetaByMap[K comparable, V any](t Map[K, V]) *Meta[K, V] {
+	kv := GetKVType(t)
+
+	return &Meta[K, V]{
+		Map:          t,
+		bucketSizeof: GetBucketSize(t),
+		mu:           sync.Mutex{},
+		ktype:        kv[0],
+		vtype:        kv[1],
+	}
 }
 
 type Parseable[T any] interface {
@@ -100,157 +125,120 @@ func parseStringToType[T any](s string) (T, error) {
 	}
 }
 
-func Start[K comparable, V any](factory func() map[K]V) *Type[K, V] {
-	userMap := factory()
+type MapBucketType int
 
-	return &Type[K, V]{
-		Data: userMap,
-	}
-}
+const (
+	MapBucketNew MapBucketType = iota
+	MapBucketOld
+)
 
-func (t *Type[K, V]) GetBucketsJSON(bucketsType string) []byte {
-	h := (**Hmap)(unsafe.Pointer(&t.Data))
+func (t *Meta[K, V]) GetBucketsJSON(btype MapBucketType) ([]byte, error) {
+	h := GetHmap(t.Map)
 
-	if bucketsType == "oldbuckets" && (*h).oldbuckets == nil {
-		return []byte("[]")
-	}
-
-	if (*h).buckets == nil {
-		return []byte("[]")
+	if h == nil {
+		return nil, errors.New("map not initialized")
 	}
 
-	bucketSize := inspectMap(t.Data)
+	var (
+		bucketCount uintptr
+		buckets     unsafe.Pointer
+	)
 
-	var bucketNum uintptr
-	var b unsafe.Pointer
+	switch btype {
+	case MapBucketOld:
+		if (*h).oldbuckets == nil || (*h).B == 0 {
+			return []byte("[]"), nil
+		}
+		bucketCount = uintptr(1) << ((*h).B - 1)
+		buckets = (*h).oldbuckets
 
-	if bucketsType == "oldbuckets" {
-		b = (*h).oldbuckets
-		if b == nil {
-			return []byte("[]")
+	case MapBucketNew:
+		if (*h).buckets == nil {
+			return []byte("[]"), nil
 		}
-		if (*h).B == 0 {
-			return []byte("[]")
-		}
-		bucketNum = uintptr(1) << ((*h).B - 1)
-	} else {
-		b = (*h).buckets
-		if b == nil {
-			return []byte("[]")
-		}
-		bucketNum = uintptr(1) << (*h).B
+		bucketCount = uintptr(1) << (*h).B
+		buckets = (*h).buckets
 	}
 
-	allBuckets := []bucketJSON{}
-	maxOverflowChainLen := 0
-	bucketIDMaxOverflowChainLen := 0
-	chainsNum := 0
-	emptyBucketsNum := 0
-	id := 0
-	mainID := 0
+	var (
+		bucketsJSON         = make([]bucketJSON[K, V], 0, bucketCount)
+		maxOverflowChainLen int
+		chainsCount         int
+		emptyBucketsCount   int
+	)
 
-	for i := uintptr(0); i < bucketNum; i++ {
+	for i := uintptr(0); i < bucketCount; i++ {
+		bucket := (*_bucket_[K, V])(unsafe.Add(buckets, i*t.bucketSizeof))
 
-		var new_main_bucket bucketJSON
-
-		bucket := (*_bucket_[K, V])(unsafe.Pointer(uintptr(b) + i*bucketSize))
-
-		new_main_bucket.Tophash = bucket.tophash
-		new_main_bucket.ID = id
-		new_main_bucket.Type = "main"
-
-		if fillBucket(&new_main_bucket, bucket) {
-			emptyBucketsNum++
-		}
-		if bucket.overflow != nil {
-			new_main_bucket.Overflow = fmt.Sprintf("0x%x", bucket.overflow)
-		} else {
-			new_main_bucket.Overflow = "nil"
+		b := bucketJSON[K, V]{
+			Tophash:  bucket.tophash,
+			Keys:     bucket.keys,
+			Values:   bucket.values,
+			Overflow: "0x" + strconv.FormatUint(uint64(uintptr(bucket.overflow)), 16),
 		}
 
-		allBuckets = append(allBuckets, new_main_bucket)
-		id++
+		emptySlots := 0
+		for j := range 8 {
+			if bucket.tophash[j] < 5 {
+				emptySlots++
+			}
+		}
+		if emptySlots == 8 {
+			emptyBucketsCount++
+		}
+
+		bucketsJSON = append(bucketsJSON, b)
 
 		currOverflowChainLen := 0
-		curr_overflow_addr := bucket.overflow
-		if curr_overflow_addr != nil {
-			chainsNum++
+		currOverflow := bucket.overflow
+		if currOverflow != nil {
+			chainsCount++
 		}
-		for curr_overflow_addr != nil {
-			var new_overflow_bucket bucketJSON
+		for currOverflow != nil {
+			bucket := (*_bucket_[K, V])(unsafe.Pointer(currOverflow))
 
-			obucket := (*_bucket_[K, V])(unsafe.Pointer(curr_overflow_addr))
-
-			new_overflow_bucket.Tophash = obucket.tophash
-			new_overflow_bucket.ID = id
-			new_overflow_bucket.Type = "overflow"
-
-			if fillBucket(&new_overflow_bucket, obucket) {
-				emptyBucketsNum++
-			}
-			if obucket.overflow != nil {
-				new_overflow_bucket.Overflow = fmt.Sprintf("0x%x", obucket.overflow)
-			} else {
-				new_overflow_bucket.Overflow = "nil"
+			b := bucketJSON[K, V]{
+				Tophash:  bucket.tophash,
+				Keys:     bucket.keys,
+				Values:   bucket.values,
+				Overflow: "0x" + strconv.FormatUint(uint64(uintptr(bucket.overflow)), 16),
 			}
 
-			curr_overflow_addr = obucket.overflow
+			emptySlots := 0
+			for j := range 8 {
+				if bucket.tophash[j] < 5 {
+					emptySlots++
+				}
+			}
+			if emptySlots == 8 {
+				emptyBucketsCount++
+			}
 
-			allBuckets = append(allBuckets, new_overflow_bucket)
-			id++
+			currOverflow = bucket.overflow
+			bucketsJSON = append(bucketsJSON, b)
 			currOverflowChainLen++
 		}
 
-		if maxOverflowChainLen < currOverflowChainLen {
-			maxOverflowChainLen = currOverflowChainLen
-			bucketIDMaxOverflowChainLen = mainID
-		}
-		mainID++
+		maxOverflowChainLen = max(maxOverflowChainLen, currOverflowChainLen)
 	}
 
-	mapo_types := GetKVType(t)
-	resp := VizualResponse{
-		Buckets: allBuckets,
+	resp := VizualResponse[K, V]{
+		Buckets: bucketsJSON,
 		Stats: BucketStats{
-			LoadFactor:       float64(len(t.Data)) / float64(int(1)<<(*h).B),
-			MaxChainLen:      maxOverflowChainLen,
-			MaxChainBucketID: bucketIDMaxOverflowChainLen,
-			NumChains:        chainsNum,
-			NumEmptyBuckets:  emptyBucketsNum,
-			KeyType:          mapo_types[0],
-			ValueType:        mapo_types[1],
+			LoadFactor:      float64(len(t.Map)) / float64(int(1)<<(*h).B),
+			MaxChainLen:     maxOverflowChainLen,
+			NumChains:       chainsCount,
+			NumEmptyBuckets: emptyBucketsCount,
+			KeyType:         t.ktype,
+			ValueType:       t.vtype,
 		},
 	}
 
 	res, err := json.Marshal(resp)
 	if err != nil || len(res) == 0 {
-		return []byte("[]")
+		return nil, err
 	}
-	return res
-}
-
-func fillBucket[K comparable, V any](b *bucketJSON, rb *_bucket_[K, V]) bool {
-	emptyKeyNum := 0
-	for j := 0; j < 8; j++ {
-		if rb.tophash[j] < 5 {
-			emptyKeyNum++
-			b.Keys[j] = nil
-			b.Values[j] = nil
-		} else {
-			if kBytes, err := json.Marshal(rb.keys[j]); err == nil {
-				b.Keys[j] = json.RawMessage(kBytes)
-			} else {
-				b.Keys[j] = json.RawMessage(`"error marshalling"`)
-			}
-
-			if vBytes, err := json.Marshal(rb.values[j]); err == nil {
-				b.Values[j] = json.RawMessage(vBytes)
-			} else {
-				b.Values[j] = json.RawMessage(`"error marshalling"`)
-			}
-		}
-	}
-	return emptyKeyNum == 8
+	return res, nil
 }
 
 func GetHmapJSON(h *Hmap) ([]byte, error) {
@@ -285,7 +273,7 @@ func GetHmapJSON(h *Hmap) ([]byte, error) {
 	return json.Marshal(jsonH)
 }
 
-func inspectMap[K comparable, V any](m map[K]V) uintptr {
+func GetBucketSize[K comparable, V any](m map[K]V) uintptr {
 	keyType := reflect.TypeOf(*new(K))
 	valType := reflect.TypeOf(*new(V))
 	keySize := keyType.Size()
@@ -294,16 +282,14 @@ func inspectMap[K comparable, V any](m map[K]V) uintptr {
 
 	bucketSize := uintptr(8) + 8*keySize + 8*valSize + ptrSize
 
-	//log.Println("map bucketSize=", bucketSize)
-
 	return bucketSize
 }
 
-func (t *Type[K, V]) GetHmap() *Hmap {
-	if t.Data == nil {
+func GetHmap[K comparable, V any](t Map[K, V]) *Hmap {
+	if t == nil {
 		return nil
 	}
-	return *(**Hmap)(unsafe.Pointer(&t.Data))
+	return *(**Hmap)(unsafe.Pointer(&t))
 }
 
 /*
@@ -341,7 +327,7 @@ func (t *Type[K, V]) Generate() {
 }
 */
 
-func GetKVType[K comparable, V any](t *Type[K, V]) [2]string {
+func GetKVType[K comparable, V any](t Map[K, V]) [2]string {
 	var out [2]string
 
 	var k K
@@ -353,9 +339,53 @@ func GetKVType[K comparable, V any](t *Type[K, V]) [2]string {
 	return out
 }
 
-func (t *Type[K, V]) PrintHmap() {
+func PrintHmap2[K comparable, V any](
+	t Map[K, V],
+	shell *ishell.Context,
+) {
+	h := GetHmap(t)
 
-	h := t.GetHmap()
+	lines := []string{
+		"Hmap {",
+		fmt.Sprintf("  count       %v", h.count),
+		fmt.Sprintf("  flags       %v", h.flags),
+		fmt.Sprintf("  B           %v", h.B),
+		fmt.Sprintf("  noverflow   %v", h.noverflow),
+		fmt.Sprintf("  hash0       %v", h.Hash0),
+		fmt.Sprintf("  buckets     0x%x", h.buckets),
+		fmt.Sprintf("  oldbuckets  0x%x", h.oldbuckets),
+		fmt.Sprintf("  nevacuate   %v", h.nevacuate),
+		fmt.Sprintf("  extra       %x", h.extra),
+		"}",
+	}
+
+	isWindows := runtime.GOOS == "windows"
+
+	start := [3]int{180, 80, 255}
+	end := [3]int{80, 200, 255}
+	steps := len(lines) - 1
+
+	for i, line := range lines {
+		var colored string
+
+		if isWindows {
+			// На Windows используем стандартный Cyan (36) или Blue (34),
+			// которые входят в диапазон 30-37 и не вызывают панику.
+			colored = fmt.Sprintf("\x1b[36m%s\x1b[0m", line)
+		} else {
+			// На Linux/macOS оставляем красивый RGB градиент
+			r := start[0] + (end[0]-start[0])*i/steps
+			g := start[1] + (end[1]-start[1])*i/steps
+			b := start[2] + (end[2]-start[2])*i/steps
+			colored = fmt.Sprintf("\x1b[38;2;%d;%d;%dm%s\x1b[0m", r, g, b, line)
+		}
+
+		shell.Println(colored)
+	}
+}
+
+func (t Map[K, V]) PrintHmap() {
+	h := GetHmap(t)
 
 	lines := []string{
 		"Hmap {",
