@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"math/rand"
 	"strings"
-	"time"
 
 	"github.com/fatih/color"
 )
@@ -13,7 +12,7 @@ var preview7 = `
 ▄▖             ▘          ▗     
 ▌ ▛▌  ▛▛▌▀▌▛▌  ▌▛▌▛▘▛▌█▌▛▘▜▘▛▌▛▘
 ▙▌▙▌  ▌▌▌█▌▙▌  ▌▌▌▄▌▙▌▙▖▙▖▐▖▙▌▌ 
-           ▌        ▌
+           ▌        ▌  by hyperocheck
  
 `
 
@@ -50,8 +49,6 @@ var preview = `
 `
 
 func Preview() {
-	rand.Seed(time.Now().UnixNano())
-
 	lines := strings.Split(strings.TrimRight(preview7, "\n"), "\n")
 
 	start := randomSoftColor()

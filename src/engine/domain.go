@@ -1,7 +1,6 @@
 package engine
 
 import (
-	"encoding/json"
 	"unsafe"
 )
 
@@ -15,9 +14,9 @@ type BucketStats struct {
 	ValueType        string  `json:"valuetype"`
 }
 
-type VizualResponse struct {
-	Buckets []bucketJSON `json:"buckets"`
-	Stats   BucketStats  `json:"stats"`
+type VizualResponse[K comparable, V any] struct {
+	Buckets []bucketJSON[K, V] `json:"buckets"`
+	Stats   BucketStats        `json:"stats"`
 }
 
 type Hmap struct {
@@ -71,12 +70,35 @@ type _bucket_[K comparable, V any] struct {
 	overflow unsafe.Pointer
 }
 
-type bucketJSON struct {
-	Tophash  [8]uint8           `json:"tophash"`
-	Keys     [8]json.RawMessage `json:"keys,omitempty"`
-	Values   [8]json.RawMessage `json:"values,omitempty"`
-	Overflow string             `json:"overflow"`
+type bucketJSON[K comparable, V any] struct {
+	Tophash  [8]uint8 `json:"tophash"`
+	Keys     [8]K     `json:"keys"`
+	Values   [8]V     `json:"values"`
+	Overflow string   `json:"overflow"`
+}
 
-	Type string `json:"type"` // main || overflow
-	ID   int    `json:"id"`   // main bucket id (bid)
+type _type struct {
+	Size_       uintptr
+	PtrBytes    uintptr
+	Hash        uint32
+	TFlag       uint8
+	Align_      uint8
+	FieldAlign_ uint8
+	Kind_       uint8
+	Equal       func(unsafe.Pointer, unsafe.Pointer) bool
+	GCData      *byte
+	Str         int32
+	PtrToThis   int32
+}
+
+type maptype struct {
+	_type
+	Key       *_type
+	Elem      *_type
+	Group     *_type
+	Hasher    func(unsafe.Pointer, uintptr) uintptr
+	GroupSize uintptr
+	SlotSize  uintptr
+	ElemOff   uintptr
+	Flags     uint32
 }

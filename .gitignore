@@ -1,5 +1,3 @@
-# frontend
-
 frontend/*
 !frontend/src 
 !frontend/dist
@@ -9,7 +7,8 @@ swiss/frontend/*
 !swiss/frontend/public
 !swiss/frontend/dist
 
-# node
 npm-debug.log
 package-lock.json
+
+*Zone.Identifier*
 

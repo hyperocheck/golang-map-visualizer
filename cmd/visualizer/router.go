@@ -15,8 +15,7 @@ import (
 	"github.com/fatih/color"
 )
 
-func startServer[K comparable, V any](t *engine.Type[K, V], port string) error {
-
+func startServer[K comparable, V any](t *engine.Meta[K, V], port string) error {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/vizual", t.VisualHandler)
 	mux.HandleFunc("/vizual_old", t.VisualOldHandler)
@@ -38,11 +37,8 @@ func startServer[K comparable, V any](t *engine.Type[K, V], port string) error {
 	magenta := color.New(color.FgMagenta)
 
 	go func() {
-		green.Printf("Сервер запущен: ")
+		green.Printf("Visualizer is running at: ")
 		magenta.Printf("http://localhost%s\n", port)
-		magenta.Printf("http://localhost%s/vizual     --> buckets JSON\n", port)
-		magenta.Printf("http://localhost%s/vizual_old --> old buckets JSON\n", port)
-		magenta.Printf("http://localhost%s/hmap       --> hmap JSON\n\n", port)
 
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			log.Fatalf("listen error: %v", err)
@@ -50,7 +46,7 @@ func startServer[K comparable, V any](t *engine.Type[K, V], port string) error {
 	}()
 
 	<-stop
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
 	return srv.Shutdown(ctx)

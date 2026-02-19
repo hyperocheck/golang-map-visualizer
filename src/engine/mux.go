@@ -2,66 +2,75 @@ package engine
 
 import (
 	"encoding/json"
-	"fmt"
 	"net/http"
 
-	"visualizer/src/logger"
 	"visualizer/src/ws"
 )
 
-func (t *Type[K, V]) VisualHandler(w http.ResponseWriter, req *http.Request) {
+func (t *Meta[K, V]) VisualHandler(w http.ResponseWriter, req *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
-	w.Write(t.GetBucketsJSON("buckets"))
+	resp, err := t.GetBucketsJSON(MapBucketNew)
+	if err != nil {
+		t.Console.PrintlnLogError(err)
+	}
+	w.Write(resp)
 }
 
-func (t *Type[K, V]) VisualOldHandler(w http.ResponseWriter, req *http.Request) {
+func (t *Meta[K, V]) VisualOldHandler(w http.ResponseWriter, req *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
-	w.Write(t.GetBucketsJSON("oldbuckets"))
+	resp, err := t.GetBucketsJSON(MapBucketOld)
+	if err != nil {
+		t.Console.PrintlnLogError(err)
+	}
+	w.Write(resp)
 }
 
-func (t *Type[K, V]) HmapHandler(w http.ResponseWriter, req *http.Request) {
+func (t *Meta[K, V]) HmapHandler(w http.ResponseWriter, req *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
-	res, _ := GetHmapJSON(t.GetHmap())
+	res, err := GetHmapJSON(GetHmap(t.Map))
+	if err != nil {
+		t.Console.PrintlnLogError(err)
+	}
 	w.Write(res)
 }
 
 type KVreq[K comparable, V any] struct {
 	Key   K `json:"key"`
-	Value V `json:"value","omitempty"`
+	Value V `json:"value,omitempty"`
 }
 
-func (t *Type[K, V]) DeleteKey(w http.ResponseWriter, req *http.Request) {
+func (t *Meta[K, V]) DeleteKey(w http.ResponseWriter, req *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
 	var response KVreq[K, V]
 	err := json.NewDecoder(req.Body).Decode(&response)
 	if err != nil {
-		logger.Log.Log("error", fmt.Sprintf("DeleteKey handler err: %s", err))
+		t.Console.PrintlnLogError(err)
 		return
 	}
 
-	delete(t.Data, response.Key)
+	delete(t.Map, response.Key)
 	t.VisualHandler(w, req)
 	t.VisualOldHandler(w, req)
 	t.HmapHandler(w, req)
 	ws.NotifyUpdate()
-	logger.Log.Log("info", "delete key ok!")
+	t.Console.PrintlnLogGood("The key has been successfully deleted")
 }
 
-func (t *Type[K, V]) UpdateKey(w http.ResponseWriter, req *http.Request) {
+func (t *Meta[K, V]) UpdateKey(w http.ResponseWriter, req *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
 	var response KVreq[K, V]
 	err := json.NewDecoder(req.Body).Decode(&response)
 	if err != nil {
-		logger.Log.Log("error", fmt.Sprintf("UpdateKey handler err: %s", err))
+		t.Console.PrintlnLogError(err)
 		return
 	}
 
-	t.Data[response.Key] = response.Value
+	t.Map[response.Key] = response.Value
 	t.VisualHandler(w, req)
 	t.VisualOldHandler(w, req)
 	t.HmapHandler(w, req)
 	ws.NotifyUpdate()
-	logger.Log.Log("info", "update key ok!")
+	t.Console.PrintlnLogGood("The key has been successfully updated")
 }

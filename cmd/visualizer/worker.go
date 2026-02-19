@@ -10,19 +10,21 @@ import (
 	"visualizer/src/preview"
 )
 
-func work[K comparable, V any](fn func() map[K]V) {
-	usermapo := engine.Start(fn)
-	
-
+func work[K comparable, V any](t engine.Map[K, V]) {
 	preview.Preview()
-	usermapo.PrintHmap()
+	// engine.PrintHmap(t)
+	cons := console.New()
+
+	meta := engine.GetMetaByMap(t)
+	meta.Console = cons
+	meta.RegisterCommands()
 
 	go func() {
-		console.StartConsole(usermapo)
+		cons.Run()
 		syscall.Kill(syscall.Getpid(), syscall.SIGTERM)
 	}()
 
-	if err := startServer(usermapo, ":8080"); err != nil {
+	if err := startServer(meta, ":8080"); err != nil {
 		log.Printf("graceful shutdown error: %v", err)
 	}
 	fmt.Println("\nGoodbye!😺")
