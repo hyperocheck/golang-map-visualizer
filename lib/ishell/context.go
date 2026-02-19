@@ -27,19 +27,71 @@ func (c *Context) Err(err error) {
 	c.err = err
 }
 
+var (
+	red    = color.New(color.FgRed).SprintFunc()
+	yellow = color.New(color.FgYellow).SprintFunc()
+	green  = color.New(color.FgGreen).SprintFunc()
+	blue   = color.New(color.FgBlue).SprintFunc()
+)
+
 func (c *Context) PrintlnLogError(a ...interface{}) {
-	red := color.New(color.FgRed).SprintFunc()
-	c.PrintlnLog(red("[ERR]"), a)
+	logs := make([]interface{}, 0, len(a)+1)
+	logs = append(logs, red("ERR"))
+	logs = append(logs, a...)
+
+	c.PrintlnLog(logs...)
 }
 
 func (c *Context) PrintlnLogWarn(a ...interface{}) {
-	yellow := color.New(color.FgYellow).SprintFunc()
-	c.PrintlnLog(yellow("[WARN]"), a)
+	logs := make([]interface{}, 0, len(a)+1)
+	logs = append(logs, yellow("WARN"))
+	logs = append(logs, a...)
+
+	c.PrintlnLog(logs...)
 }
 
 func (c *Context) PrintlnLogGood(a ...interface{}) {
-	green := color.New(color.FgGreen).SprintFunc()
-	c.PrintlnLog(green("[GOOD]"), a)
+	logs := make([]interface{}, 0, len(a)+1)
+	logs = append(logs, green("GOOD"))
+	logs = append(logs, a...)
+
+	c.PrintlnLog(logs...)
+}
+
+func (c *Context) PrintlnLogEvent(a ...interface{}) {
+	logs := make([]interface{}, 0, len(a)+1)
+	logs = append(logs, blue("INFO"))
+	logs = append(logs, a...)
+
+	c.PrintlnLog(logs...)
+}
+
+func (c *Context) PrintfLogError(format string, a ...interface{}) {
+	format = red("ERR ") + format
+
+	c.Printf(format, a...)
+}
+
+func (c *Context) PrintfLogWarn(format string, a ...interface{}) {
+	format = yellow("WARN ") + format
+
+	c.Printf(format, a...)
+}
+
+func (c *Context) PrintfLogGood(format string, a ...interface{}) {
+	format = green("GOOD ") + format
+
+	c.Printf(format, a...)
+}
+
+func (c *Context) PrintfLogEvent(format string, a ...interface{}) {
+	format = blue("INFO ") + format
+
+	c.Printf(format, a...)
+}
+
+func (c *Context) PrintfLog(format string, a ...interface{}) {
+	c.Printf(format, a...)
 }
 
 // contextValues is the map for values in the context.

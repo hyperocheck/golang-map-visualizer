@@ -24,7 +24,7 @@ import (
 )
 
 const (
-	defaultPrompt      = "💚 "
+	defaultPrompt      = ">>> "
 	defaultMultiPrompt = "... "
 )
 
@@ -76,6 +76,10 @@ func NewWithConfig(conf *readline.Config) *Shell {
 	}
 
 	return NewWithReadline(rl)
+}
+
+func (shell *Shell) SetPrompt(prompt string) {
+	shell.reader.prompt = prompt
 }
 
 // NewWithReadline creates a new shell with a custom readline instance.

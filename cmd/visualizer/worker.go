@@ -15,6 +15,7 @@ func work[K comparable, V any](t engine.Map[K, V]) {
 	preview.Preview()
 
 	cons := console.New()
+	cons.SetPrompt("💚 ")
 	meta := engine.GetMetaByMap(t)
 	meta.Console = cons
 	meta.RegisterCommands()
