@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"log"
+
 	"syscall"
 
 	"visualizer/src/console"
@@ -12,9 +13,8 @@ import (
 
 func work[K comparable, V any](t engine.Map[K, V]) {
 	preview.Preview()
-	// engine.PrintHmap(t)
-	cons := console.New()
 
+	cons := console.New()
 	meta := engine.GetMetaByMap(t)
 	meta.Console = cons
 	meta.RegisterCommands()

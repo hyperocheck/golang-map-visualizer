@@ -33,12 +33,10 @@ func startServer[K comparable, V any](t *engine.Meta[K, V], port string) error {
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
 
-	green := color.New(color.FgGreen)
-	magenta := color.New(color.FgMagenta)
+	green := color.New(color.FgGreen).SprintfFunc()
 
 	go func() {
-		green.Printf("Visualizer is running at: ")
-		magenta.Printf("http://localhost%s\n", port)
+		t.Console.PrintlnLog(green("Go to http://localhost%s\n", port))
 
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			log.Fatalf("listen error: %v", err)
