@@ -22,8 +22,8 @@ func startServer[K comparable, V any](t *engine.Meta[K, V], port string) error {
 	mux.HandleFunc("/hmap", t.HmapHandler)
 	mux.HandleFunc("/delete_key", t.DeleteKey)
 	mux.HandleFunc("/update_key", t.UpdateKey)
-	mux.Handle("/", http.FileServer(http.Dir("frontend/dist")))
 	mux.HandleFunc("/ws", ws.Handler)
+	mux.Handle("/", http.FileServer(http.Dir("frontend/dist")))
 
 	srv := &http.Server{
 		Addr:    port,

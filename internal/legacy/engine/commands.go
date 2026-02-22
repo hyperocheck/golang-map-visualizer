@@ -25,6 +25,7 @@ func (m *Meta[K, V]) RegisterCommands() {
 	m.registerRange()
 	m.registerShow()
 	m.registerHmap()
+	m.registerMapAccess1()
 	m.registerHelp()
 }
 
@@ -122,7 +123,7 @@ func (m *Meta[K, V]) registerDelete() {
 }
 
 func (m *Meta[K, V]) registerEvil() {
-	m.Console.RegisterCommand("evil", "evil <count> [--life] — insert keys into bucket 0 (map[int]int only)", func(ctx *ishell.Context) {
+	m.Console.RegisterCommand("evil", "evil <count> [--life] [--bid <int>] — insert keys into target bucket (map[int]int only)", func(ctx *ishell.Context) {
 		if err := m.CheckTypeInt(); err != nil {
 			ctx.PrintlnLogError(err)
 			return
@@ -130,7 +131,7 @@ func (m *Meta[K, V]) registerEvil() {
 
 		args := ctx.Args
 		if len(args) < 1 {
-			ctx.PrintlnLogWarn("Usage: evil <count> [--life]")
+			ctx.PrintlnLogWarn("Usage: evil <count> [--life] [--bid <int>]")
 			return
 		}
 
@@ -141,14 +142,26 @@ func (m *Meta[K, V]) registerEvil() {
 		}
 
 		liveMode := false
-		for _, arg := range args[1:] {
-			if arg == "--life" {
+		BUCKET_NUM := uint8(0)
+		flagArgs := args[1:]
+		for i := 0; i < len(flagArgs); i++ {
+			switch flagArgs[i] {
+			case "--life":
 				liveMode = true
-				break
+			case "--bid":
+				if i+1 >= len(flagArgs) {
+					ctx.PrintlnLogWarn("--bid requires an integer argument")
+					return
+				}
+				i++
+				bid, err := strconv.Atoi(flagArgs[i])
+				if err != nil || bid < 0 {
+					ctx.PrintlnLogError("Invalid --bid value:", flagArgs[i])
+					return
+				}
+				BUCKET_NUM = uint8(bid)
 			}
 		}
-
-		const BUCKET_NUM = uint8(0)
 		probe := 0
 		inserted := 0
 		totalAttempts := 0
@@ -212,27 +225,33 @@ func (m *Meta[K, V]) CheckTypeInt() error {
 }
 
 func (m *Meta[K, V]) registerRange() {
-	m.Console.RegisterCommand("range", "range <from> <to> [--life] — insert range of keys (map[int]int only)", func(ctx *ishell.Context) {
+	m.Console.RegisterCommand("range", "range <insert|delete> <from> <to> [--life] — bulk operation on range of keys (map[int]int only)", func(ctx *ishell.Context) {
 		if err := m.CheckTypeInt(); err != nil {
 			ctx.PrintlnLog(err)
 			return
 		}
 
 		args := ctx.Args
-		if len(args) < 2 {
-			ctx.PrintlnLogWarn("Usage: range <from> <to> [--life]")
+		if len(args) < 3 {
+			ctx.PrintlnLogWarn("Usage: range <insert|delete> <from> <to> [--life]")
 			return
 		}
 
-		from, err := strconv.Atoi(args[0])
-		if err != nil {
-			ctx.PrintlnLogError("Invalid from:", args[0])
+		op := args[0]
+		if op != "insert" && op != "delete" {
+			ctx.PrintlnLogError("Unknown operation:", op, "(expected insert or delete)")
 			return
 		}
 
-		to, err := strconv.Atoi(args[1])
+		from, err := strconv.Atoi(args[1])
 		if err != nil {
-			ctx.PrintlnLogError("Invalid to:", args[1])
+			ctx.PrintlnLogError("Invalid from:", args[1])
+			return
+		}
+
+		to, err := strconv.Atoi(args[2])
+		if err != nil {
+			ctx.PrintlnLogError("Invalid to:", args[2])
 			return
 		}
 
@@ -242,53 +261,77 @@ func (m *Meta[K, V]) registerRange() {
 		}
 
 		liveMode := false
-		for _, arg := range args[2:] {
+		for _, arg := range args[3:] {
 			if arg == "--life" {
 				liveMode = true
 				break
 			}
 		}
 
-		inserted := 0
-		updated := 0
+		affected := 0
+		skipped := 0
 
-		if liveMode {
-			ctx.Printf("Range mode (live): inserting keys from %d to %d with live updates...\n", from, to)
-			for i := from; i <= to; i++ {
-				key := any(i).(K)
-				val := any(i).(V)
-
-				if _, exists := m.Map[key]; exists {
-					updated++
-					continue
+		if op == "insert" {
+			if liveMode {
+				ctx.Printf("Range insert (live): keys from %d to %d...\n", from, to)
+				for i := from; i <= to; i++ {
+					key := any(i).(K)
+					val := any(i).(V)
+					if _, exists := m.Map[key]; exists {
+						skipped++
+						continue
+					}
+					m.Map[key] = val
+					affected++
+					ws.NotifyUpdate()
+					time.Sleep(100 * time.Millisecond)
+					ctx.PrintfLogEvent("Inserted key %v : val %v", key, val)
 				}
-
-				inserted++
-
-				m.Map[key] = val
-
+			} else {
+				ctx.PrintfLog("Range insert (batch): keys from %d to %d...", from, to)
+				for i := from; i <= to; i++ {
+					key := any(i).(K)
+					val := any(i).(V)
+					if _, exists := m.Map[key]; exists {
+						skipped++
+					} else {
+						m.Map[key] = val
+						affected++
+					}
+				}
 				ws.NotifyUpdate()
-				time.Sleep(100 * time.Millisecond)
-
-				ctx.PrintfLogEvent("Insert key %v : val %v", key, val)
 			}
+			ctx.PrintfLogGood("Range insert done! Inserted: %d, skipped (already exist): %d", affected, skipped)
 		} else {
-			ctx.PrintfLog("Range mode (batch): inserting keys from %d to %d...", from, to)
-			for i := from; i <= to; i++ {
-				key := any(i).(K)
-				val := any(i).(V)
-
-				if _, exists := m.Map[key]; exists {
-					updated++
-				} else {
-					inserted++
+			if liveMode {
+				ctx.Printf("Range delete (live): keys from %d to %d...\n", from, to)
+				for i := from; i <= to; i++ {
+					key := any(i).(K)
+					if _, exists := m.Map[key]; !exists {
+						skipped++
+						continue
+					}
+					delete(m.Map, key)
+					affected++
+					ws.NotifyUpdate()
+					time.Sleep(100 * time.Millisecond)
+					ctx.PrintfLogEvent("Deleted key %v", key)
 				}
-				m.Map[key] = val
+			} else {
+				ctx.PrintfLog("Range delete (batch): keys from %d to %d...", from, to)
+				for i := from; i <= to; i++ {
+					key := any(i).(K)
+					if _, exists := m.Map[key]; exists {
+						delete(m.Map, key)
+						affected++
+					} else {
+						skipped++
+					}
+				}
+				ws.NotifyUpdate()
 			}
-			ws.NotifyUpdate()
+			ctx.PrintfLogGood("Range delete done! Deleted: %d, skipped (not found): %d", affected, skipped)
 		}
-
-		ctx.PrintfLogGood("Range completed! Inserted: %d new keys, Updated: %d existing keys", inserted, updated)
 	})
 }
 
@@ -403,16 +446,18 @@ func buildHelpMessage() string {
 		"│",
 		sec("Bulk Operations"),
 		"│",
-		row("range", "<from> <to>", "Insert a range of values  (int, int)"),
+		row("range", "<insert|delete> <from> <to>", "Insert or delete a range of keys  (int, int)"),
 		flag("--life", "step-by-step live mode"),
 		"│",
-		row("evil", "<n>", "Collision attack: n keys into bucket #0"),
+		row("evil", "<n>", "Collision attack: n keys into target bucket"),
 		flag("--life", "step-by-step live mode"),
+		flag("--bid <int>", "target bucket number (default: 0)"),
 		"│",
 		sec("Inspection"),
 		"│",
 		row("show", "", "Display all key-value pairs"),
 		row("hmap", "", "Print internal hmap structure"),
+		row("mapaccess1", "<key>", "Step-by-step simulation of mapaccess1"),
 		"│",
 		"╰─────────────────────────────────────────────────────────────────────",
 	}
