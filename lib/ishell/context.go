@@ -1,6 +1,8 @@
 package ishell
 
 import (
+	"fmt"
+
 	"github.com/fatih/color"
 )
 
@@ -27,19 +29,78 @@ func (c *Context) Err(err error) {
 	c.err = err
 }
 
+var (
+	red    = color.New(color.FgRed).SprintFunc()
+	yellow = color.New(color.FgYellow).SprintFunc()
+	green  = color.New(color.FgGreen).SprintFunc()
+	blue   = color.New(color.FgBlue).SprintFunc()
+)
+
 func (c *Context) PrintlnLogError(a ...interface{}) {
-	red := color.New(color.FgRed).SprintFunc()
-	c.PrintlnLog(red("[ERR]"), a)
+	i := make([]interface{}, 0, len(a)+1)
+	i = append(i, red("ERR"))
+	i = append(i, a...)
+	c.PrintlnLog(i...)
 }
 
 func (c *Context) PrintlnLogWarn(a ...interface{}) {
-	yellow := color.New(color.FgYellow).SprintFunc()
-	c.PrintlnLog(yellow("[WARN]"), a)
+	i := make([]interface{}, 0, len(a)+1)
+	i = append(i, yellow("WARN"))
+	i = append(i, a...)
+	c.PrintlnLog(i...)
 }
 
 func (c *Context) PrintlnLogGood(a ...interface{}) {
-	green := color.New(color.FgGreen).SprintFunc()
-	c.PrintlnLog(green("[GOOD]"), a)
+	i := make([]interface{}, 0, len(a)+1)
+	i = append(i, green("GOOD"))
+	i = append(i, a...)
+	c.PrintlnLog(i...)
+}
+
+func (c *Context) PrintlnLogEvent(a ...interface{}) {
+	i := make([]interface{}, 0, len(a)+1)
+	i = append(i, blue("INFO"))
+	i = append(i, a...)
+	c.PrintlnLog(i...)
+}
+
+func (c *Context) PrintfLogError(prompt string, a ...interface{}) {
+	i := make([]interface{}, 0, len(a)+1)
+	i = append(i, red("ERR"))
+	i = append(i, fmt.Sprintf(prompt, a...))
+	c.PrintlnLog(i...)
+}
+
+func (c *Context) PrintfLogWarn(prompt string, a ...interface{}) {
+	i := make([]interface{}, 0, len(a)+1)
+	i = append(i, yellow("WARN"))
+	i = append(i, fmt.Sprintf(prompt, a...))
+	c.PrintlnLog(i...)
+}
+
+func (c *Context) PrintfLogGood(prompt string, a ...interface{}) {
+	i := make([]interface{}, 0, len(a)+1)
+	i = append(i, green("GOOD"))
+	i = append(i, fmt.Sprintf(prompt, a...))
+	c.PrintlnLog(i...)
+}
+
+func (c *Context) PrintfLogEvent(prompt string, a ...interface{}) {
+	i := make([]interface{}, 0, len(a)+1)
+	i = append(i, blue("INFO"))
+	i = append(i, fmt.Sprintf(prompt, a...))
+	c.PrintlnLog(i...)
+}
+
+func (c *Context) PrintfLogWarn_(prompt string, a ...interface{}) {
+	i := make([]interface{}, 0, len(a)+1)
+	i = append(i, yellow("WARN "))
+	i = append(i, fmt.Sprintf(prompt, a...))
+	c.Print(i...)
+}
+
+func (c *Context) PrintfLog(prompt string, a ...interface{}) {
+	c.PrintlnLog(fmt.Sprintf(prompt, a...))
 }
 
 // contextValues is the map for values in the context.

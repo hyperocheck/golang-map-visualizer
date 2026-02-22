@@ -8,7 +8,8 @@ import (
 	"strconv"
 	"sync"
 	"unsafe"
-	"visualizer/src/console"
+
+	"visualizer/internal/console"
 )
 
 type (
@@ -179,7 +180,6 @@ func GetHmapJSON(h *Hmap) ([]byte, error) {
 		jsonH.Extra = []string{"0x0", "0x0", "0x0"}
 	}
 
-	// return json.MarshalIndent(jsonH, "", "  ")
 	return json.Marshal(jsonH)
 }
 
@@ -213,35 +213,3 @@ func GetKVType[K comparable, V any](t Map[K, V]) [2]string {
 
 	return out
 }
-
-/*
-func (t Map[K, V]) PrintHmap() {
-	h := GetHmap(t)
-
-	lines := []string{
-		"Hmap {",
-		fmt.Sprintf("  count       %v", h.count),
-		fmt.Sprintf("  flags       %v", h.flags),
-		fmt.Sprintf("  B           %v", h.B),
-		fmt.Sprintf("  noverflow   %v", h.noverflow),
-		fmt.Sprintf("  hash0       %v", h.Hash0),
-		fmt.Sprintf("  buckets     0x%x", h.buckets),
-		fmt.Sprintf("  oldbuckets  0x%x", h.oldbuckets),
-		fmt.Sprintf("  nevacuate   %v", h.nevacuate),
-		fmt.Sprintf("  extra       %x", h.extra),
-		"}",
-	}
-
-	start := [3]int{180, 80, 255}
-	end := [3]int{80, 200, 255}
-
-	steps := len(lines) - 1
-	for i, line := range lines {
-		r := start[0] + (end[0]-start[0])*i/steps
-		g := start[1] + (end[1]-start[1])*i/steps
-		b := start[2] + (end[2]-start[2])*i/steps
-
-		color.RGB(r, g, b).Println(line)
-	}
-}
-*/

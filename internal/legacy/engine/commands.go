@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"visualizer/src/ws"
+	"visualizer/internal/ws"
 
 	"github.com/abiosoft/ishell/v2"
 )
@@ -25,6 +25,7 @@ func (m *Meta[K, V]) RegisterCommands() {
 	m.registerRange()
 	m.registerShow()
 	m.registerHmap()
+	m.registerHelp()
 }
 
 func (m *Meta[K, V]) registerPing() {
@@ -122,9 +123,8 @@ func (m *Meta[K, V]) registerDelete() {
 
 func (m *Meta[K, V]) registerEvil() {
 	m.Console.RegisterCommand("evil", "evil <count> [--life] — insert keys into bucket 0 (map[int]int only)", func(ctx *ishell.Context) {
-
 		if err := m.CheckTypeInt(); err != nil {
-			ctx.PrintlnLog(err)
+			ctx.PrintlnLogError(err)
 			return
 		}
 
@@ -169,7 +169,7 @@ func (m *Meta[K, V]) registerEvil() {
 					m.Map[key] = val
 					elapsed := time.Since(start)
 					inserted++
-					ctx.Printf("[%d/%d] Inserted key=%v, attempts=%d, time=%v\n", inserted, count, probe, totalAttempts, elapsed)
+					ctx.PrintfLogEvent("[%d/%d] Inserted key=%v, attempts=%d, time=%v", inserted, count, probe, totalAttempts, elapsed)
 					ws.NotifyUpdate()
 					totalAttempts = 0
 					time.Sleep(500 * time.Millisecond)
@@ -192,10 +192,11 @@ func (m *Meta[K, V]) registerEvil() {
 				probe++
 			}
 			ws.NotifyUpdate()
-			ctx.Printf("Inserted %d keys, total attempts: %d\n", count, totalAttempts)
 		}
+		totalAttempts = 0
+		ctx.PrintfLogGood("Evil mode completed! Inserted %d keys, total attempts: %d", count, totalAttempts)
 
-		ctx.PrintlnLogGood("Evil mode completed!")
+		//ctx.PrintfLogEvent("Evil mode completed!")
 	})
 }
 
@@ -212,7 +213,6 @@ func (m *Meta[K, V]) CheckTypeInt() error {
 
 func (m *Meta[K, V]) registerRange() {
 	m.Console.RegisterCommand("range", "range <from> <to> [--life] — insert range of keys (map[int]int only)", func(ctx *ishell.Context) {
-
 		if err := m.CheckTypeInt(); err != nil {
 			ctx.PrintlnLog(err)
 			return
@@ -260,20 +260,20 @@ func (m *Meta[K, V]) registerRange() {
 
 				if _, exists := m.Map[key]; exists {
 					updated++
-				} else {
-					inserted++
+					continue
 				}
+
+				inserted++
+
 				m.Map[key] = val
 
 				ws.NotifyUpdate()
 				time.Sleep(100 * time.Millisecond)
 
-				if (i-from+1)%10 == 0 || i == to {
-					ctx.Printf("Progress: %d/%d (inserted: %d, updated: %d)\n", i-from+1, to-from+1, inserted, updated)
-				}
+				ctx.PrintfLogEvent("Insert key %v : val %v", key, val)
 			}
 		} else {
-			ctx.PrintlnLog(fmt.Sprintf("Range mode (batch): inserting keys from %d to %d...", from, to))
+			ctx.PrintfLog("Range mode (batch): inserting keys from %d to %d...", from, to)
 			for i := from; i <= to; i++ {
 				key := any(i).(K)
 				val := any(i).(V)
@@ -288,7 +288,7 @@ func (m *Meta[K, V]) registerRange() {
 			ws.NotifyUpdate()
 		}
 
-		ctx.PrintlnLogGood(fmt.Sprintf("Range completed! Inserted: %d new keys, Updated: %d existing keys", inserted, updated))
+		ctx.PrintfLogGood("Range completed! Inserted: %d new keys, Updated: %d existing keys", inserted, updated)
 	})
 }
 
@@ -297,18 +297,18 @@ func (m *Meta[K, V]) registerShow() {
 		mapSize := len(m.Map)
 
 		if mapSize > 100 {
-			ctx.Print("Map contains more than 100 elements. Are you sure? (y/n): ")
+			ctx.PrintfLogWarn_("Map contains more than 100 elements. Are you sure? (y/n): ")
 			answer := ctx.ReadLine()
 			answer = strings.ToLower(strings.TrimSpace(answer))
 
 			if answer != "y" && answer != "yes" && answer != "н" {
-				ctx.Println("Cancelled")
+				ctx.PrintlnLog("Cancelled")
 				return
 			}
 		}
 
 		if mapSize == 0 {
-			ctx.Println("Map is empty")
+			ctx.PrintlnLogEvent("Map is empty")
 			return
 		}
 
@@ -316,7 +316,7 @@ func (m *Meta[K, V]) registerShow() {
 		for k, v := range m.Map {
 			ctx.Printf("%v : %v\n", k, v)
 		}
-		ctx.Printf("Total: %d pairs\n", mapSize)
+		ctx.PrintfLogGood("Total: %d pairs", mapSize)
 	})
 }
 
@@ -366,4 +366,87 @@ func PrintHmap2[K comparable, V any](
 
 		shell.Println(colored)
 	}
+}
+
+func buildHelpMessage() string {
+	rgb := func(r, g, b int, s string) string {
+		return fmt.Sprintf("\x1b[38;2;%d;%d;%dm%s\x1b[0m", r, g, b, s)
+	}
+	y := func(s string) string { return rgb(255, 195, 55, s) }  // amber  — commands
+	d := func(s string) string { return rgb(115, 115, 135, s) } // dim    — args & notes
+	w := func(s string) string { return rgb(210, 215, 225, s) } // white  — descriptions
+	tl := func(s string) string { return rgb(55, 195, 210, s) } // teal   — flags
+	p := func(s string) string { return rgb(160, 120, 255, s) } // purple — section headers
+
+	row := func(cmd, args, desc string) string {
+		return fmt.Sprintf("│    %s%s%s",
+			y(fmt.Sprintf("%-8s", cmd)),
+			d(fmt.Sprintf("%-14s", args)),
+			w(desc),
+		)
+	}
+	flag := func(name, desc string) string {
+		return fmt.Sprintf("│             %s     %s", tl("╰──➤  "+name), d(desc))
+	}
+	sec := func(name string) string {
+		return "│  " + p("▸ "+name)
+	}
+
+	raw := []string{
+		"╭────────────────────────────────────────────────────────────────────",
+		"│",
+		sec("Map Operations"),
+		"│",
+		row("insert", "<key> <value>", "Insert a key-value pair  (comparable, any)"),
+		row("update", "<key> <value>", "Update a key-value pair  (comparable, any)"),
+		row("delete", "<key>", "Delete a key-value pair by key  (comparable)"),
+		"│",
+		sec("Bulk Operations"),
+		"│",
+		row("range", "<from> <to>", "Insert a range of values  (int, int)"),
+		flag("--life", "step-by-step live mode"),
+		"│",
+		row("evil", "<n>", "Collision attack: n keys into bucket #0"),
+		flag("--life", "step-by-step live mode"),
+		"│",
+		sec("Inspection"),
+		"│",
+		row("show", "", "Display all key-value pairs"),
+		row("hmap", "", "Print internal hmap structure"),
+		"│",
+		"╰─────────────────────────────────────────────────────────────────────",
+	}
+
+	sR, sG, sB := 80, 220, 100
+	eR, eG, eB := 50, 155, 210
+	total := len(raw)
+
+	var buf strings.Builder
+	//buf.WriteString("\n")
+
+	for i, line := range raw {
+		frac := float64(i) / float64(total-1)
+		r := int(float64(sR) + frac*float64(eR-sR))
+		g := int(float64(sG) + frac*float64(eG-sG))
+		b := int(float64(sB) + frac*float64(eB-sB))
+
+		if strings.ContainsRune(line, '\x1b') {
+			runes := []rune(line)
+			buf.WriteString(rgb(r, g, b, string(runes[:1])) + string(runes[1:]) + "\n")
+		} else {
+			if i == len(raw)-1 {
+				buf.WriteString(rgb(r, g, b, line))
+			} else {
+				buf.WriteString(rgb(r, g, b, line) + "\n")
+			}
+		}
+	}
+
+	return buf.String()
+}
+
+func (m *Meta[K, V]) registerHelp() {
+	m.Console.RegisterCommand("help", "help!", func(ctx *ishell.Context) {
+		ctx.Println(buildHelpMessage())
+	})
 }
