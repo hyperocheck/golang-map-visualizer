@@ -24,7 +24,7 @@ import (
 )
 
 const (
-	defaultPrompt      = "💚 "
+	defaultPrompt      = ">>> "
 	defaultMultiPrompt = "... "
 )
 
@@ -96,6 +96,10 @@ func NewWithReadline(rl *readline.Instance) *Shell {
 	shell.Actions = &shellActionsImpl{Shell: shell}
 	addDefaultFuncs(shell)
 	return shell
+}
+
+func (s *Shell) SetPrompt(prompt string) {
+	s.reader.prompt = prompt
 }
 
 // Start starts the shell but does not wait for it to stop.

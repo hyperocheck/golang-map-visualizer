@@ -1,0 +1,106 @@
+{{8 8 1566218654 2 8 8 53 <nil> 0x51a9b8 12084 0} 0x4cfbc0 0x4cfbc0 0x4d9160 0x476420 136 16 8 0}
+HASH: 6511553459301844162
+--- FULL SCENARIO ---
+Directory index: 0
+	SEQ ▶️{mask:1 offset:1 index:0}
+		GROUP ▶️{data:0xc0000cc088}
+<nil> false
+{
+ "used": 10,
+ "seed": 6787832016171927533,
+ "dirPtr": 824634359856,
+ "dirLen": 1,
+ "globalDepth": 0,
+ "globalShift": 64,
+ "writing": 0,
+ "tombstonePossible": false,
+ "clearSeq": 0,
+ "tables": [
+  {
+   "addr": 824634548224,
+   "index": 0,
+   "used": 10,
+   "capacity": 16,
+   "growthLeft": 4,
+   "localDepth": 0,
+   "lengthMask": 1,
+   "groups": [
+    {
+     "ctrls": "c1F0gICAgIA=",
+     "slots": [
+      {
+       "k": 0,
+       "v": 0
+      },
+      {
+       "k": 2,
+       "v": 2
+      },
+      {
+       "k": 4,
+       "v": 4
+      },
+      {
+       "k": 0,
+       "v": 0
+      },
+      {
+       "k": 0,
+       "v": 0
+      },
+      {
+       "k": 0,
+       "v": 0
+      },
+      {
+       "k": 0,
+       "v": 0
+      },
+      {
+       "k": 0,
+       "v": 0
+      }
+     ]
+    },
+    {
+     "ctrls": "QmxUIAcxK4A=",
+     "slots": [
+      {
+       "k": 1,
+       "v": 1
+      },
+      {
+       "k": 3,
+       "v": 3
+      },
+      {
+       "k": 5,
+       "v": 5
+      },
+      {
+       "k": 6,
+       "v": 6
+      },
+      {
+       "k": 7,
+       "v": 7
+      },
+      {
+       "k": 8,
+       "v": 8
+      },
+      {
+       "k": 9,
+       "v": 9
+      },
+      {
+       "k": 0,
+       "v": 0
+      }
+     ]
+    }
+   ]
+  }
+ ]
+}
+uniq_pointer_to_table:  1

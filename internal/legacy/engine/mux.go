@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 
-	"visualizer/src/ws"
+	"visualizer/internal/ws"
 )
 
 func (t *Meta[K, V]) VisualHandler(w http.ResponseWriter, req *http.Request) {

@@ -3,12 +3,11 @@ package main
 import (
 	"fmt"
 	"log"
-
 	"syscall"
 
-	"visualizer/src/console"
-	"visualizer/src/engine"
-	"visualizer/src/preview"
+	"visualizer/internal/console"
+	"visualizer/internal/legacy/engine"
+	"visualizer/internal/preview"
 )
 
 func work[K comparable, V any](t engine.Map[K, V]) {
@@ -18,6 +17,7 @@ func work[K comparable, V any](t engine.Map[K, V]) {
 	meta := engine.GetMetaByMap(t)
 	meta.Console = cons
 	meta.RegisterCommands()
+	meta.Console.SetPrompt("> ")
 
 	go func() {
 		cons.Run()

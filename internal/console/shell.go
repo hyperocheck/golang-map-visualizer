@@ -19,6 +19,10 @@ func New() *Console {
 	return &Console{shell: shell}
 }
 
+func (c *Console) SetPrompt(prompt string) {
+	c.shell.SetPrompt(prompt)
+}
+
 func (c *Console) Print(a ...any) {
 	c.shell.Print(a...)
 }
@@ -35,19 +39,35 @@ func (c *Console) Printf(format string, a ...any) {
 	c.shell.Printf(format, a...)
 }
 
+var (
+	red    = color.New(color.FgRed).SprintFunc()
+	yellow = color.New(color.FgYellow).SprintFunc()
+	green  = color.New(color.FgGreen).SprintFunc()
+	blue   = color.New(color.FgBlue).SprintFunc()
+)
+
 func (c *Console) PrintlnLogError(a ...any) {
-	red := color.New(color.FgRed).SprintFunc()
-	c.shell.PrintlnLog(red("[ERR]"), a)
+	logs := make([]interface{}, 0, len(a)+1)
+	logs = append(logs, red("ERR"))
+	logs = append(logs, a...)
+
+	c.PrintlnLog(logs...)
 }
 
 func (c *Console) PrintlnLogWarn(a ...any) {
-	yellow := color.New(color.FgYellow).SprintFunc()
-	c.shell.PrintlnLog(yellow("[WARN]"), a)
+	logs := make([]interface{}, 0, len(a)+1)
+	logs = append(logs, yellow("WARN"))
+	logs = append(logs, a...)
+
+	c.PrintlnLog(logs...)
 }
 
 func (c *Console) PrintlnLogGood(a ...any) {
-	green := color.New(color.FgGreen).SprintFunc()
-	c.shell.PrintlnLog(green("[GOOD]"), a)
+	logs := make([]interface{}, 0, len(a)+1)
+	logs = append(logs, green("GOOD"))
+	logs = append(logs, a...)
+
+	c.PrintlnLog(logs...)
 }
 
 func (c *Console) RegisterCommand(name, help string, handler CommandHandler) {

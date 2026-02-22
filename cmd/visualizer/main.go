@@ -1,14 +1,14 @@
 package main
 
 import (
-	"visualizer/src/cmd"
-	"visualizer/src/engine"
+	"visualizer/internal/flags"
+	"visualizer/internal/legacy/engine"
 )
 
 func main() {
 	m := make(engine.Map[int, int], 1)
 
-	for i := cmd.Flag.From; i < cmd.Flag.To; i++ {
+	for i := flags.Flag.From; i < flags.Flag.To; i++ {
 		m[i] = i
 	}
 

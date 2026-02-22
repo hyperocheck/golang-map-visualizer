@@ -9,8 +9,8 @@ import (
 	"syscall"
 	"time"
 
-	"visualizer/src/engine"
-	"visualizer/src/ws"
+	"visualizer/internal/legacy/engine"
+	"visualizer/internal/ws"
 
 	"github.com/fatih/color"
 )
