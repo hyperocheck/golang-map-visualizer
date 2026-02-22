@@ -11,6 +11,17 @@ type hashFunc func(unsafe.Pointer, uintptr) uintptr
 
 var mapType *maptype
 
+func FullHash[K comparable, V any](t *Meta[K, V], key K) uintptr {
+	if mapType == nil {
+		addr := GetMapType(t.Map)
+		mapType = (*maptype)(unsafe.Pointer(addr))
+	}
+	hmap := GetHmap(t.Map)
+	var hf hashFunc
+	*(*uintptr)(unsafe.Pointer(&hf)) = *(*uintptr)(unsafe.Pointer(&mapType.Hasher))
+	return hf(unsafe.Pointer(&key), uintptr(hmap.Hash0))
+}
+
 func CheckHash[K comparable, V any](t *Meta[K, V], key K) uint8 {
 	if mapType == nil {
 		addr := GetMapType(t.Map)
