@@ -1,6 +1,8 @@
 frontend/*
 !frontend/src 
 !frontend/dist
+!frontend/public
+!frontend/index.html
 
 swiss/frontend/*
 !swiss/frontend/src
