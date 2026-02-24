@@ -1,44 +1,88 @@
-<p align="center">
-    <img src="https://github.com/user-attachments/assets/ecf08358-3a49-4b16-95e3-20c4441cf9c0" width="45%" />
-</p>
-<p align="center">
-    <img src="https://img.shields.io/badge/-1.23-brightgreen?style=plastic&logo=go&logoColor=white" />
-</p>
-
-## Todo
-- [ ] Implement map visualization for swisstables (in progress, branch swisstables)
-- [ ] Add an endpoint with an overview of the work of the map (or .md file)
-- [ ] I need a good image for the logo
-
 ## About Project
-<img width="888" height="508" alt="{5847B7A3-78FE-4037-B16B-C85C607C0CC4}" src="https://github.com/user-attachments/assets/85bc1411-3ab7-4797-bd67-e7ef1a25fb48" />
+<img width="949" height="540" alt="{1CF60219-8A91-4235-848E-3CB0238DA8A6}" src="https://github.com/user-attachments/assets/7ad12e30-a046-4560-8f23-4a9cc8cd1cdc" />
 
-This is a simple program that visualizes the inner workings of the hashmap data structure in Golang using the unsafe package. We are talking about the old map (closed hashing) up to and including `version 1.23`. After version 1.23, the map began to work on a completely different principle. Version `1.23.12` was used in testing. You can read the original map code [here](https://cs.opensource.google/go/go/+/release-branch.go1.23:src/runtime/map.go).
+Это консольная программа с веб-визуализацией,которая наглядно показывает, как работает тип данных *map* в Go версии `<=1.23.x`. Оригинальный код работы map можно найти в исходниках языка [здесь](https://cs.opensource.google/go/go/+/release-branch.go1.23:src/runtime/map.go). Код тестировался и разрабатывался на версии `1.23.12`, поэтому настоятельно рекомендуется использовать именно эту версию.
 
-## How to install&launch
+## Как скачать, установить и запустить
 ```shell
+go install golang.org/dl/go1.23.12@latest
+go1.23.12 download
 git clone https://github.com/hyperocheck/golang-map-visualizer.git
 cd golang-map-visualizer
-go1.23 run ./cmd/visualizer/
+go1.23.12 run ./cmd/visualizer/
 ```
-## How to use
-`./src/visualizer/main.go`
+## Как использовать
+Входная точка программы находится в файле `./src/visualizer/main.go`. Здесь создаётся *map* типа `map[int]int`, который можно предварительно заполнить данными. Вы можете использовать любой сериализуемый тип в качестве ключа и значения. Однако для полной поддержки всего функционала CLI рекомендуется использовать `[int]int`.
 ```go
 func main() {
-    // так создается мапа, тут же указывается тип
-    // тут можно заранее сделать чо угодно с мапой
-    // также есть флаги --from и --to, можете использовать их при запуске
-    // типо go1.23 run ./cmd/visualizer --from 100 --to 1000 
-	m := make(engine.Map[int, int], 1)
-
-	for i := cmd.Flag.From; i < cmd.Flag.To; i++ {
-		m[i] = i
-	}
-
-	work(m) // не удалять:))
+    // Примеры использования флагов:
+    // go1.23.12 run ./cmd/visualizer --from 100 --to 1000 
+    
+    m := make(engine.Map[int, int], 1)
+    for i := cmd.Flag.From; i < cmd.Flag.To; i++ {
+        m[i] = i
+    }
+    work(m) // не удалять :)
 }
-
 ```
-## How to play
+## Как играть
+Перейдите в браузер на `http://localhost:8080` и откройте CLI. В консоли работает история (стрелки ↑/↓) и автодополнение через Tab. Далее покажу примеры команд и что они делают.  
+```shell
+# Вставить пару ключ знчение
+insert 123 382783728
+```
+```shell
+# Обновить пару ключ знчение
+update 123 9990
+```
+```shell
+# Удалить пару ключ знчение
+delete 123
+```
+```shell
+# Вывести все пары ключ значение
+show
+```
+```shell
+# Вывести структуру hmap
+hmap
+```
+```shell
+# Показать доступные команды
+help
+```
+```shell
+# Выйти из программы (можно с помощью ctrl+c)
+exit
+```
+```shell
+# Вставить пары ключ значение в цикле от 10 до 1400
+range insert 10 1400
+```
+```shell
+# Вставить пары ключ значение в цикле от 10 до 1400 в лайф режиме визуализации
+range insert 10 1400 --life
+```
+```shell
+# Удалить пары ключ значение в цикле от 10 до 1400
+range delete 10 1400
+```
+```shell
+# Режим коллизий. Вставить 10 каких-то пар ключ значений специально в первый бакет (bid=0)
+evil 10
+```
+```shell
+# Режим коллизий. Вставить 10 каких-то пар ключ значений специально в первый бакет (bid=0) в лайф режиме
+evil 10 --life
+```
+```shell
+# Режим коллизий. Вставить 10 каких-то пар ключ значений специально в 3 бакет (bid=3) в лайф режиме
+evil 10 --bid 3 --life
+```
+```shell
+# Вывести подробный step-by-step процесс поиска значения под ключом 2382. 
+mapaccess1 2382
+```
+
 
 
