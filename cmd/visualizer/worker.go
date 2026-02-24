@@ -24,7 +24,7 @@ func work[K comparable, V any](t engine.Map[K, V]) {
 		syscall.Kill(syscall.Getpid(), syscall.SIGTERM)
 	}()
 
-	if err := startServer(meta, ":9090"); err != nil {
+	if err := startServer(meta, ":8080"); err != nil {
 		log.Printf("graceful shutdown error: %v", err)
 	}
 	fmt.Println("\nGoodbye!😺")

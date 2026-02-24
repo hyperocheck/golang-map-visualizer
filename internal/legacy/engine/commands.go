@@ -446,7 +446,7 @@ func buildHelpMessage() string {
 		"│",
 		sec("Bulk Operations"),
 		"│",
-		row("range", "<insert|delete> <from> <to>", "Insert or delete a range of keys  (int, int)"),
+		row("range", "<insert|delete> <from> <to> ", "Insert or delete a range of keys  (int, int)"),
 		flag("--life", "step-by-step live mode"),
 		"│",
 		row("evil", "<n>", "Collision attack: n keys into target bucket"),
@@ -457,7 +457,7 @@ func buildHelpMessage() string {
 		"│",
 		row("show", "", "Display all key-value pairs"),
 		row("hmap", "", "Print internal hmap structure"),
-		row("mapaccess1", "<key>", "Step-by-step simulation of mapaccess1"),
+		row("mapaccess1", " <key>", "Step-by-step simulation of mapaccess1"),
 		"│",
 		"╰─────────────────────────────────────────────────────────────────────",
 	}
