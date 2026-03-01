@@ -85,6 +85,7 @@
   let sideWidth = 280
   let lastSideWidth = 280
   let isSideVisible = true
+  let darkMode = false
   let resizing = false
   let isPanning = false
   let rafId = null
@@ -134,6 +135,60 @@ function buildChains(bucketArray) {
   return chains
 }
   
+  function getTheme() {
+    if (darkMode) return {
+      bucketFill: '#1e2030',
+      bucketStrokeNew: '#6c7ab8',
+      bucketHoverStrokeNew: '#5e9cf5',
+      text: '#cdd6f4',
+      textMuted: '#a6adc8',
+      keyFill: '#1a3626',
+      keyFillEmpty: '#162a1e',
+      keyStroke: '#2d9e6a',
+      keyHoverFill: '#20472f',
+      valueFill: '#2e2205',
+      valueFillEmpty: '#241c04',
+      valueStroke: '#c27c00',
+      valueHoverFill: '#3d2e08',
+      overflowFill: '#181825',
+      overflowStroke: '#444',
+      arrowNew: '#6c7ab8',
+      arrowOld: '#ff6b6b',
+      tophashStroke: '#444',
+      tophashText: '#cdd6f4',
+      tophash: ['#252535', '#3d3b10', '#4d4510', '#4d3010', '#4d1810'],
+      tophashGte5: '#2a4d10',
+    }
+    return {
+      bucketFill: '#fff',
+      bucketStrokeNew: '#000',
+      bucketHoverStrokeNew: '#228be6',
+      text: '#000',
+      textMuted: '#495057',
+      keyFill: '#b2f2bb',
+      keyFillEmpty: '#dbfdc9',
+      keyStroke: '#12b886',
+      keyHoverFill: '#9feaa4',
+      valueFill: '#ffec99',
+      valueFillEmpty: '#fff2b8',
+      valueStroke: '#ffa94d',
+      valueHoverFill: '#ffe066',
+      overflowFill: '#ddd',
+      overflowStroke: '#000',
+      arrowNew: '#000',
+      arrowOld: '#ff6b6b',
+      tophashStroke: '#000',
+      tophashText: '#000',
+      tophash: ['#F1F2F0', '#f5f29d', '#F5DF58', '#f5a662', '#F06559'],
+      tophashGte5: '#BBF059',
+    }
+  }
+
+  function toggleTheme() {
+    darkMode = !darkMode
+    drawCanvas()
+  }
+
   async function load() {
     try {
       const [vizRes, oldRes, hmapRes] = await Promise.all([
@@ -338,14 +393,15 @@ function buildChains(bucketArray) {
     
     visibleBuckets.forEach((b) => drawBucket(b, scaleX, scaleY))
     
+    const t = getTheme()
     visibleArrows.forEach((a) => {
-      ctx.strokeStyle = a.isOld ? '#ff6b6b' : '#000'
+      ctx.strokeStyle = a.isOld ? t.arrowOld : t.arrowNew
       ctx.lineWidth = 1.5 / Math.min(scaleX, scaleY)
       ctx.beginPath()
       ctx.moveTo(a.x, a.y1)
       ctx.lineTo(a.x, a.y2)
       ctx.stroke()
-      ctx.fillStyle = a.isOld ? '#ff6b6b' : '#000'
+      ctx.fillStyle = a.isOld ? t.arrowOld : t.arrowNew
       ctx.beginPath()
       ctx.moveTo(a.x, a.y2)
       ctx.lineTo(a.x - 4, a.y2 - 8)
@@ -358,110 +414,106 @@ function buildChains(bucketArray) {
   }
   
   function drawBucket(b, scaleX, scaleY) {
-    let bucketStroke = b.isOld ? '#ff6b6b' : '#000'
+    const th = getTheme()
+    let bucketStroke = b.isOld ? '#ff6b6b' : th.bucketStrokeNew
     const strokeW = b.isOld ? 2 : bucketStrokeWidth
 
     if (hovered && hovered.chainIdx === b.chainIdx && hovered.bucketIdx === b.bucketIdx && hovered.isOld === b.isOld) {
-      bucketStroke = b.isOld ? '#ff8787' : '#228be6'
+      bucketStroke = b.isOld ? '#ff8787' : th.bucketHoverStrokeNew
     }
-    
-    ctx.fillStyle = '#fff'
+
+    ctx.fillStyle = th.bucketFill
     ctx.strokeStyle = bucketStroke
     ctx.lineWidth = strokeW / Math.min(scaleX, scaleY)
     ctx.beginPath()
     ctx.roundRect(b.x, b.y, b.width, b.height, bucketRadius)
     ctx.fill()
     ctx.stroke()
-    
-    // Отображаем displayBid только для main бакетов
+
     if (b.isMain && b.bucket.displayBid !== undefined) {
       ctx.font = 'bold 11px "JetBrains Mono", monospace'
-      ctx.fillStyle = '#495057'
+      ctx.fillStyle = th.textMuted
       ctx.textAlign = 'left'
       ctx.fillText(`bid ${b.bucket.displayBid}`, b.x + b.padding, b.y + b.padding + 12)
     }
     if (!b.isMain) {
       ctx.font = 'bold 11px "JetBrains Mono", monospace'
-      ctx.fillStyle = '#495057'
+      ctx.fillStyle = th.textMuted
       ctx.textAlign = 'left'
       ctx.fillText(`overflow`, b.x + b.padding, b.y + b.padding + 12)
     }
-    
+
     const tophash = b.bucket?.tophash || []
     const tophashWidth = b.width - b.padding * 2
     const cellWidth = tophash.length > 0 ? tophashWidth / tophash.length : fixedTophashCellWidth
-    
-    tophash.forEach((t, i) => {
-      let tophashColor = '#eee'
-const tVal = parseInt(t)
-if (!isNaN(tVal)) {
-  if (tVal === 0) tophashColor = '#F1F2F0'
-  else if (tVal === 1) tophashColor = '#f5f29d'
-  else if (tVal === 2) tophashColor = '#F5DF58'
-  else if (tVal === 3) tophashColor = '#f5a662'
-  else if (tVal === 4) tophashColor = '#F06559'
-  else if (tVal >= 5) tophashColor = '#BBF059'
-}
-ctx.fillStyle = tophashColor
-      ctx.strokeStyle = '#000'
+
+    tophash.forEach((tv, i) => {
+      let tophashColor = th.tophash[0]
+      const tVal = parseInt(tv)
+      if (!isNaN(tVal)) {
+        if (tVal >= 5) tophashColor = th.tophashGte5
+        else tophashColor = th.tophash[tVal] ?? th.tophash[0]
+      }
+      ctx.fillStyle = tophashColor
+      ctx.strokeStyle = th.tophashStroke
       ctx.lineWidth = 1 / Math.min(scaleX, scaleY)
       ctx.fillRect(b.x + b.padding + i * cellWidth, b.y + b.padding + bucketHeaderHeight, cellWidth, tophashHeight)
       ctx.strokeRect(b.x + b.padding + i * cellWidth, b.y + b.padding + bucketHeaderHeight, cellWidth, tophashHeight)
-ctx.font = '12px "JetBrains Mono", monospace'
-      ctx.fillStyle = '#000'
+      ctx.font = '12px "JetBrains Mono", monospace'
+      ctx.fillStyle = th.tophashText
       ctx.textAlign = 'center'
-      ctx.fillText(t, b.x + b.padding + i * cellWidth + cellWidth / 2, b.y + b.padding + bucketHeaderHeight + tophashHeight / 1.5)
+      ctx.fillText(tv, b.x + b.padding + i * cellWidth + cellWidth / 2, b.y + b.padding + bucketHeaderHeight + tophashHeight / 1.5)
     })
-    
+
     const keys = b.bucket?.keys || []
     const bucketTophash = b.bucket?.tophash || []
     keys.forEach((k, i) => {
       const isEmpty = bucketTophash[i] < 5
-      let fill = isEmpty ? '#dbfdc9' : '#b2f2bb'
+      let fill = isEmpty ? th.keyFillEmpty : th.keyFill
       if (hovered && hovered.type === 'key' && hovered.chainIdx === b.chainIdx && hovered.bucketIdx === b.bucketIdx && hovered.isOld === b.isOld && hovered.index === i) {
-        fill = '#9feaa4'
+        fill = th.keyHoverFill
       }
       ctx.fillStyle = fill
-      ctx.strokeStyle = '#12b886'
+      ctx.strokeStyle = th.keyStroke
       ctx.lineWidth = 1 / Math.min(scaleX, scaleY)
       ctx.fillRect(b.x + b.padding, b.y + b.padding + bucketHeaderHeight + tophashHeight + i * rowHeight, b.width - padding * 2, rowHeight)
       ctx.strokeRect(b.x + b.padding, b.y + b.padding + bucketHeaderHeight + tophashHeight + i * rowHeight, b.width - padding * 2, rowHeight)
       ctx.font = '13px "JetBrains Mono", monospace'
-      ctx.fillStyle = '#000'
+      ctx.fillStyle = th.text
       ctx.textAlign = 'left'
       ctx.fillText(formatPreview(k, isEmpty), b.x + b.padding + 6, b.y + b.padding + bucketHeaderHeight + tophashHeight + i * rowHeight + rowHeight / 1.5)
     })
-    
+
     const values = b.bucket?.values || []
     const keysLen = keys.length
     values.forEach((v, i) => {
       const isEmpty = bucketTophash[i] < 5
-      let fill = isEmpty ? '#fff2b8' : '#ffec99'
+      let fill = isEmpty ? th.valueFillEmpty : th.valueFill
       if (hovered && hovered.type === 'value' && hovered.chainIdx === b.chainIdx && hovered.bucketIdx === b.bucketIdx && hovered.isOld === b.isOld && hovered.index === i) {
-        fill = '#ffe066'
+        fill = th.valueHoverFill
       }
       ctx.fillStyle = fill
-      ctx.strokeStyle = '#ffa94d'
+      ctx.strokeStyle = th.valueStroke
       ctx.lineWidth = 1 / Math.min(scaleX, scaleY)
       ctx.fillRect(b.x + b.padding, b.y + b.padding + bucketHeaderHeight + tophashHeight + keysLen * rowHeight + i * rowHeight, b.width - padding * 2, rowHeight)
       ctx.strokeRect(b.x + b.padding, b.y + b.padding + bucketHeaderHeight + tophashHeight + keysLen * rowHeight + i * rowHeight, b.width - padding * 2, rowHeight)
       ctx.font = '13px "JetBrains Mono", monospace'
-      ctx.fillStyle = '#000'
+      ctx.fillStyle = th.text
       ctx.fillText(formatPreview(v, isEmpty), b.x + b.padding + 6, b.y + b.padding + bucketHeaderHeight + tophashHeight + keysLen * rowHeight + i * rowHeight + rowHeight / 1.5)
     })
-    
+
     if (b.bucket) {
       const valuesLen = values.length
-      ctx.fillStyle = '#ddd'
-      ctx.strokeStyle = '#000'
+      ctx.fillStyle = th.overflowFill
+      ctx.strokeStyle = th.overflowStroke
       ctx.lineWidth = 1 / Math.min(scaleX, scaleY)
       ctx.fillRect(b.x + b.padding, b.y + b.padding + bucketHeaderHeight + tophashHeight + keysLen * rowHeight + valuesLen * rowHeight, b.width - padding * 2, rowHeight)
       ctx.strokeRect(b.x + b.padding, b.y + b.padding + bucketHeaderHeight + tophashHeight + keysLen * rowHeight + valuesLen * rowHeight, b.width - padding * 2, rowHeight)
       ctx.font = '12px "JetBrains Mono", monospace'
-      ctx.fillStyle = '#000'
+      ctx.fillStyle = th.text
       ctx.fillText(b.bucket.overflow || '', b.x + b.padding + 6, b.y + b.padding + bucketHeaderHeight + tophashHeight + keysLen * rowHeight + valuesLen * rowHeight + rowHeight / 1.5)
     }
-    
+
     if (selectedKey && selectedKey.chainIdx === b.chainIdx && selectedKey.bucketIdx === b.bucketIdx && selectedKey.isOld === b.isOld) {
       ctx.strokeStyle = '#ff0000'
       ctx.lineWidth = 3 / Math.min(scaleX, scaleY)
@@ -752,7 +804,7 @@ ctx.font = '12px "JetBrains Mono", monospace'
   })
 </script>
 
-<div class="root">
+<div class="root" class:dark={darkMode}>
   <div
     id="canvas-container"
     on:wheel|nonpassive={handleWheel}
@@ -771,46 +823,53 @@ ctx.font = '12px "JetBrains Mono", monospace'
   {#if isSideVisible}
     <div class="splitter" on:mousedown={startResize}></div>
   {/if}
-  <div class="side" style="width: {sideWidth}px; display: {isSideVisible ? 'block' : 'none'};">
-    <h3>hmap</h3>
-    {#if hmap}
-      {#each Object.entries(hmap) as [k, v]}
-        <div class="row"><span>{k}</span><b>{v}</b></div>
-      {/each}
-    {/if}
-    {#if stats}
-      <h3>stats</h3>
-      <div class="row"><span>Load factor</span><b>{stats.loadFactor.toFixed(2)}</b></div>
-      <div class="row"><span>Max chain len</span><b>{stats.maxChainLen}</b></div>
-      <div class="row"><span>Chains count</span><b>{stats.numChains}</b></div>
-      <div class="row"><span>Empty buckets</span><b>{stats.numEmptyBuckets}</b></div>
-      <div class="row"><span>Key type</span><b>{stats.keytype}</b></div>
-      <div class="row"><span>Value type</span><b>{stats.valuetype}</b></div>
-    {/if}
-    <div class="inspector-section">
-      <h3>inspector</h3>
-      {#if selectedKey}
-        <div style="margin-bottom: 10px; color: #555;">
-          <small>Key at index {selectedKey.index}</small>
-        </div>
-        <div class="tree-label">Selected Key:</div>
-        <div class="tree-container"><JSONTree value={selectedKey.key} shouldShowPreview={false}/></div>
-        <div class="tree-label" style="margin-top: 10px;">Current Value:</div>
-        <div class="tree-container"><JSONTree value={selectedKey.value} /></div>
-        <div class="tree-label" style="margin-top: 10px;">New Value (JSON or raw string):</div>
-        <textarea bind:value={newValueJson} style="width: 100%; height: 100px; font-family: monospace; font-size: 12px;"></textarea>
-        <p style="font-size: 11px; color: #666; margin-top: 5px;">
-          Enter JSON for objects or raw string/number. Press 'd' to delete, 'u' to update, 'Esc' to deselect.
-        </p>
-      {:else if selectedBucket}
-        <div class="tree-label">Keys:</div>
-        <div class="tree-container"><JSONTree value={withZeroValues(selectedBucket.keys, selectedBucket.tophash)} /></div>
-        <div class="tree-label" style="margin-top: 10px;">Values:</div>
-        <div class="tree-container"><JSONTree value={withZeroValues(selectedBucket.values, selectedBucket.tophash)} /></div>
-        <div class="row" style="margin-top: 10px; font-size: 11px;"><span>Overflow</span><code>{selectedBucket.overflow}</code></div>
-      {:else}
-        <p style="color: #999; font-size: 12px; font-style: italic; text-align: center;">Click on the bucket to analyze</p>
+  <div class="side" class:dark={darkMode} style="width: {sideWidth}px; display: {isSideVisible ? 'flex' : 'none'}; flex-direction: column;">
+    <div class="side-content">
+      <h3>hmap</h3>
+      {#if hmap}
+        {#each Object.entries(hmap) as [k, v]}
+          <div class="row"><span>{k}</span><b>{v}</b></div>
+        {/each}
       {/if}
+      {#if stats}
+        <h3>stats</h3>
+        <div class="row"><span>Load factor</span><b>{stats.loadFactor.toFixed(2)}</b></div>
+        <div class="row"><span>Max chain len</span><b>{stats.maxChainLen}</b></div>
+        <div class="row"><span>Chains count</span><b>{stats.numChains}</b></div>
+        <div class="row"><span>Empty buckets</span><b>{stats.numEmptyBuckets}</b></div>
+        <div class="row"><span>Key type</span><b>{stats.keytype}</b></div>
+        <div class="row"><span>Value type</span><b>{stats.valuetype}</b></div>
+      {/if}
+      <div class="inspector-section">
+        <h3>inspector</h3>
+        {#if selectedKey}
+          <div style="margin-bottom: 10px;">
+            <small>Key at index {selectedKey.index}</small>
+          </div>
+          <div class="tree-label">Selected Key:</div>
+          <div class="tree-container"><JSONTree value={selectedKey.key} shouldShowPreview={false}/></div>
+          <div class="tree-label" style="margin-top: 10px;">Current Value:</div>
+          <div class="tree-container"><JSONTree value={selectedKey.value} /></div>
+          <div class="tree-label" style="margin-top: 10px;">New Value (JSON or raw string):</div>
+          <textarea bind:value={newValueJson} class="side-textarea"></textarea>
+          <p class="hint-text">
+            Enter JSON for objects or raw string/number. Press 'd' to delete, 'u' to update, 'Esc' to deselect.
+          </p>
+        {:else if selectedBucket}
+          <div class="tree-label">Keys:</div>
+          <div class="tree-container"><JSONTree value={withZeroValues(selectedBucket.keys, selectedBucket.tophash)} /></div>
+          <div class="tree-label" style="margin-top: 10px;">Values:</div>
+          <div class="tree-container"><JSONTree value={withZeroValues(selectedBucket.values, selectedBucket.tophash)} /></div>
+          <div class="row" style="margin-top: 10px; font-size: 11px;"><span>Overflow</span><code>{selectedBucket.overflow}</code></div>
+        {:else}
+          <p class="empty-hint">Click on the bucket to analyze</p>
+        {/if}
+      </div>
+    </div>
+    <div class="theme-toggle-wrapper">
+      <button class="theme-btn" on:click={toggleTheme}>
+        {darkMode ? '☀ Light' : '☾ Dark'}
+      </button>
     </div>
   </div>
 </div>
@@ -820,50 +879,74 @@ ctx.font = '12px "JetBrains Mono", monospace'
   :global(html, body) { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; }
   .root { display: flex; width: 100%; height: 100dvh; overflow: hidden; background: #ebfbee; }
   #canvas-container { flex: 1; position: relative; overflow: hidden; cursor: grab; touch-action: none; }
-.root::before {
-  content: '';
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: url('/public/1.png') center/cover fixed;
-  filter: blur(50px); /* меняй значение для большего/меньшего размытия */
-  z-index: -1;
-}
-  #canvas-container:active { cursor: grabbing;}
-  #canvas-container { 
-  flex: 1; 
-  position: relative; 
-  overflow: hidden; 
-  cursor: grab; 
-  touch-action: none; 
-}
+  .root::before {
+    content: '';
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: url('/public/1.png') center/cover fixed;
+    filter: blur(50px);
+    z-index: -1;
+  }
+  #canvas-container:active { cursor: grabbing; }
+  #canvas-container::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: url('/public/mikuiru.gif') center/cover fixed;
+    filter: blur(5px);
+    opacity: 0.9;
+    z-index: 0;
+  }
+  canvas { position: relative; z-index: 1; }
 
-#canvas-container::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: url('/public/mikuiru.gif') center/cover fixed;
-  filter: blur(5px); /* увеличь значение для большего размытия */
-  opacity: 0.9; /* добавь прозрачность */
-  z-index: 0;
-}
+  .toggle-btn { position: absolute; right: 15px; top: 15px; z-index: 100; background: #ffffff; border: 1px solid #ccc; padding: 6px 12px; border-radius: 6px; cursor: pointer; font-family: sans-serif; font-weight: 500; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1); transition: background 0.2s, color 0.2s, border-color 0.2s; }
+  .splitter { width: 6px; background: #ccc; cursor: col-resize; user-select: none; z-index: 10; transition: background 0.2s; }
 
-canvas {
-  position: relative;
-  z-index: 1; /* чтобы canvas был поверх фона */
-}
-  .toggle-btn { position: absolute; right: 15px; top: 15px; z-index: 100; background: #ffffff; border: 1px solid #ccc; padding: 6px 12px; border-radius: 6px; cursor: pointer; font-family: sans-serif; font-weight: 500; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1); }
-  .splitter { width: 6px; background: #ccc; cursor: col-resize; user-select: none; z-index: 10; }
-  .side { padding: 12px; border-left: 1px solid #ccc; background: #fafafa; overflow-y: auto; font-family: monospace; font-size: 13px; flex-shrink: 0; }
+  /* Sidebar */
+  .side { border-left: 1px solid #ccc; background: #fafafa; font-family: monospace; font-size: 13px; flex-shrink: 0; transition: background 0.2s, color 0.2s, border-color 0.2s; }
+  .side-content { padding: 12px; flex: 1; overflow-y: auto; }
   .row { display: flex; justify-content: space-between; padding: 2px 0; border-bottom: 1px solid #eee; }
   .tree-label { font-size: 11px; font-weight: bold; color: #666; text-transform: uppercase; margin-bottom: 4px; }
   .tree-container { background: #fff; border: 1px solid #eee; border-radius: 4px; padding: 4px; max-height: 250px; overflow: auto; }
   code { background: #eee; padding: 1px 4px; border-radius: 3px; }
   .inspector-section { margin-top: 20px; border-top: 2px solid #ccc; padding-top: 10px; }
+  .side-textarea { width: 100%; height: 100px; font-family: monospace; font-size: 12px; background: #fff; color: #000; border: 1px solid #ccc; border-radius: 4px; padding: 4px; resize: vertical; }
+  .hint-text { font-size: 11px; color: #666; margin-top: 5px; }
+  .empty-hint { color: #999; font-size: 12px; font-style: italic; text-align: center; }
+
+  /* Theme toggle */
+  .theme-toggle-wrapper { padding: 10px 12px; border-top: 1px solid #ddd; flex-shrink: 0; }
+  .theme-btn {
+    width: 100%;
+    padding: 8px 0;
+    border-radius: 8px;
+    border: 1px solid #ccc;
+    background: #f0f0f0;
+    color: #333;
+    font-family: monospace;
+    font-size: 13px;
+    cursor: pointer;
+    transition: background 0.2s, color 0.2s, border-color 0.2s;
+  }
+  .theme-btn:hover { background: #e0e0e0; }
+
+  /* Dark mode */
+  .root.dark { background: #11111b; }
+  .root.dark .toggle-btn { background: #313244; color: #cdd6f4; border-color: #45475a; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4); }
+  .root.dark .splitter { background: #313244; }
+  .root.dark #canvas-container::before { filter: blur(5px) brightness(0.3); }
+  .side.dark { background: #1e1e2e; color: #cdd6f4; border-left-color: #313244; }
+  .side.dark .row { border-bottom-color: #313244; }
+  .side.dark h3 { color: #89b4fa; }
+  .side.dark .tree-label { color: #a6adc8; }
+  .side.dark .tree-container { background: #181825; border-color: #313244; }
+  .side.dark code { background: #313244; color: #cdd6f4; }
+  .side.dark .inspector-section { border-top-color: #313244; }
+  .side.dark .side-textarea { background: #181825; color: #cdd6f4; border-color: #313244; }
+  .side.dark .hint-text { color: #a6adc8; }
+  .side.dark .empty-hint { color: #585b70; }
+  .side.dark .theme-toggle-wrapper { border-top-color: #313244; }
+  .side.dark .theme-btn { background: #313244; color: #cdd6f4; border-color: #45475a; }
+  .side.dark .theme-btn:hover { background: #45475a; }
 </style>
 
