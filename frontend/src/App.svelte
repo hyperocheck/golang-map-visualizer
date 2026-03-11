@@ -25,11 +25,9 @@
   }
   
   function syncVbAspect() {
-    const container = document.getElementById('canvas-container')
-    if (!container) return
-    const rect = container.getBoundingClientRect()
-    const aspect = rect.height / rect.width
-    vb.h = vb.w * aspect
+    const rect = containerRect
+    if (!rect || rect.width === 0) return
+    vb.h = vb.w * (rect.height / rect.width)
   }
 
   let cameraInitialized = false
@@ -79,16 +77,20 @@
   let svgBuckets = []
   let svgArrows = []
   let svgLabels = []
+  let visibleBuckets = []
   let svgWidth = 2000
   let svgHeight = 2000
   let vb = { x: 0, y: 0, w: 1200, h: 900 }
   let sideWidth = 280
   let lastSideWidth = 280
   let isSideVisible = true
-  let darkMode = false
+  let lastContainerWidth = 0
+  let containerEl = null
+  let containerRect = { width: 0, height: 0 }
   let resizing = false
   let isPanning = false
   let rafId = null
+  let hoverRafId = null
   let lastMouseX = 0
   let lastMouseY = 0
   
@@ -135,59 +137,30 @@ function buildChains(bucketArray) {
   return chains
 }
   
-  function getTheme() {
-    if (darkMode) return {
-      bucketFill: '#1e2030',
-      bucketStrokeNew: '#6c7ab8',
-      bucketHoverStrokeNew: '#5e9cf5',
-      text: '#cdd6f4',
-      textMuted: '#a6adc8',
-      keyFill: '#1a3626',
-      keyFillEmpty: '#162a1e',
-      keyStroke: '#2d9e6a',
-      keyHoverFill: '#20472f',
-      valueFill: '#2e2205',
-      valueFillEmpty: '#241c04',
-      valueStroke: '#c27c00',
-      valueHoverFill: '#3d2e08',
-      overflowFill: '#181825',
-      overflowStroke: '#444',
-      arrowNew: '#6c7ab8',
-      arrowOld: '#ff6b6b',
-      tophashStroke: '#444',
-      tophashText: '#cdd6f4',
-      tophash: ['#252535', '#3d3b10', '#4d4510', '#4d3010', '#4d1810'],
-      tophashGte5: '#2a4d10',
-    }
-    return {
-      bucketFill: '#fff',
-      bucketStrokeNew: '#000',
-      bucketHoverStrokeNew: '#228be6',
-      text: '#000',
-      textMuted: '#495057',
-      keyFill: '#b2f2bb',
-      keyFillEmpty: '#dbfdc9',
-      keyStroke: '#12b886',
-      keyHoverFill: '#9feaa4',
-      valueFill: '#ffec99',
-      valueFillEmpty: '#fff2b8',
-      valueStroke: '#ffa94d',
-      valueHoverFill: '#ffe066',
-      overflowFill: '#ddd',
-      overflowStroke: '#000',
-      arrowNew: '#000',
-      arrowOld: '#ff6b6b',
-      tophashStroke: '#000',
-      tophashText: '#000',
-      tophash: ['#F1F2F0', '#f5f29d', '#F5DF58', '#f5a662', '#F06559'],
-      tophashGte5: '#BBF059',
-    }
+  const theme = {
+    bucketFill: '#fff',
+    bucketStrokeNew: '#000',
+    bucketHoverStrokeNew: '#228be6',
+    text: '#000',
+    textMuted: '#495057',
+    keyFill: '#b2f2bb',
+    keyFillEmpty: '#dbfdc9',
+    keyStroke: '#12b886',
+    keyHoverFill: '#9feaa4',
+    valueFill: '#ffec99',
+    valueFillEmpty: '#fff2b8',
+    valueStroke: '#ffa94d',
+    valueHoverFill: '#ffe066',
+    overflowFill: '#ddd',
+    overflowStroke: '#000',
+    arrowNew: '#000',
+    arrowOld: '#ff6b6b',
+    tophashStroke: '#000',
+    tophashText: '#000',
+    tophash: ['#F1F2F0', '#f5f29d', '#F5DF58', '#f5a662', '#F06559'],
+    tophashGte5: '#BBF059',
   }
-
-  function toggleTheme() {
-    darkMode = !darkMode
-    drawCanvas()
-  }
+  function getTheme() { return theme }
 
   async function load() {
     try {
@@ -301,10 +274,15 @@ function buildChains(bucketArray) {
           if (!b) continue
           const keys = b.keys && Array.isArray(b.keys) ? b.keys : []
           const values = b.values && Array.isArray(b.values) ? b.values : []
+          const tophash = b.tophash || []
           const height = bucketHeaderHeight + tophashHeight + keys.length * rowHeight + values.length * rowHeight + rowHeight + padding * 2
-          
-          svgBuckets.push({ x, y, width: fixedBucketWidth, height, bucket: b, padding, isOld: true, chainIdx, bucketIdx, isMain: bucketIdx === 0 })
-          
+          const keyPreviews = keys.map((k, i) => formatPreview(k, tophash[i] < 5))
+          const valuePreviews = values.map((v, i) => formatPreview(v, tophash[i] < 5))
+          const tophashParsed = tophash.map(tv => { const n = parseInt(tv); return isNaN(n) ? -1 : n })
+          const tophashHex = tophashParsed.map(n => n < 0 ? '?' : n.toString(16))
+
+          svgBuckets.push({ x, y, width: fixedBucketWidth, height, bucket: b, padding, isOld: true, chainIdx, bucketIdx, isMain: bucketIdx === 0, keyPreviews, valuePreviews, tophashParsed, tophashHex })
+
           if (bucketIdx < chain.length - 1) {
             svgArrows.push({ x: x + fixedBucketWidth / 2, y1: y + height, y2: y + height + gapY - arrowOffset, isOld: true })
             y += height + gapY
@@ -315,28 +293,33 @@ function buildChains(bucketArray) {
         }
         x += fixedBucketWidth + gapX
       }
-      
+
       if (showLabels) svgLabels.push({ x: gapX, y: gapY + 20, text: 'OLD', isOld: true })
       newStartY = oldMaxY + gapY * 2
     }
-    
+
     if (hasNewChains) {
       x = gapX
       for (let chainIdx = 0; chainIdx < chains.length; chainIdx++) {
         const chain = chains[chainIdx]
         if (!chain || chain.length === 0) continue
         let y = newStartY
-        
+
         console.log(`Drawing new chain ${chainIdx} with ${chain.length} buckets at x=${x}`)
-        
+
         for (let bucketIdx = 0; bucketIdx < chain.length; bucketIdx++) {
           const b = chain[bucketIdx]
           if (!b) continue
           const keys = b.keys && Array.isArray(b.keys) ? b.keys : []
           const values = b.values && Array.isArray(b.values) ? b.values : []
+          const tophash = b.tophash || []
           const height = bucketHeaderHeight + tophashHeight + keys.length * rowHeight + values.length * rowHeight + rowHeight + padding * 2
-          
-          svgBuckets.push({ x, y, width: fixedBucketWidth, height, bucket: b, padding, isOld: false, chainIdx, bucketIdx, isMain: bucketIdx === 0 })
+          const keyPreviews = keys.map((k, i) => formatPreview(k, tophash[i] < 5))
+          const valuePreviews = values.map((v, i) => formatPreview(v, tophash[i] < 5))
+          const tophashParsed = tophash.map(tv => { const n = parseInt(tv); return isNaN(n) ? -1 : n })
+          const tophashHex = tophashParsed.map(n => n < 0 ? '?' : n.toString(16))
+
+          svgBuckets.push({ x, y, width: fixedBucketWidth, height, bucket: b, padding, isOld: false, chainIdx, bucketIdx, isMain: bucketIdx === 0, keyPreviews, valuePreviews, tophashParsed, tophashHex })
           
           if (bucketIdx < chain.length - 1) {
             svgArrows.push({ x: x + fixedBucketWidth / 2, y1: y + height, y2: y + height + gapY - arrowOffset, isOld: false })
@@ -357,167 +340,200 @@ function buildChains(bucketArray) {
   }
   
   function drawCanvas() {
-    if (!ctx || !canvas) return
-    const container = document.getElementById('canvas-container')
-    if (!container) return
-    const rect = container.getBoundingClientRect()
+    if (!ctx || !canvas || !containerEl) return
+    const rect = containerRect
+    if (rect.width === 0 || rect.height === 0) return
 
-    canvas.width = rect.width * dpr
-    canvas.height = rect.height * dpr
+    vb.h = vb.w * (rect.height / rect.width)
+
+    const targetW = Math.round(rect.width * dpr)
+    const targetH = Math.round(rect.height * dpr)
+    if (canvas.width !== targetW || canvas.height !== targetH) {
+      canvas.width = targetW
+      canvas.height = targetH
+    }
     ctx.setTransform(1, 0, 0, 1, 0, 0)
     ctx.clearRect(0, 0, canvas.width, canvas.height)
     ctx.scale(dpr, dpr)
-    
+
     const scaleX = rect.width / vb.w
     const scaleY = rect.height / vb.h
-    const offsetX = -vb.x * scaleX
-    const offsetY = -vb.y * scaleY
-    ctx.translate(offsetX, offsetY)
+    ctx.translate(-vb.x * scaleX, -vb.y * scaleY)
     ctx.scale(scaleX, scaleY)
-    
-    const visibleBuckets = svgBuckets.filter((b) => {
-      return b.x + b.width > vb.x && b.x < vb.x + vb.w && b.y + b.height > vb.y && b.y < vb.y + vb.h
-    })
-    
-    const visibleArrows = svgArrows.filter((a) => {
-      return a.x > vb.x && a.x < vb.x + vb.w && ((a.y1 > vb.y && a.y1 < vb.y + vb.h) || (a.y2 > vb.y && a.y2 < vb.y + vb.h))
-    })
-    
-    const visibleLabels = svgLabels.filter((l) => l.x > vb.x && l.x < vb.x + vb.w && l.y > vb.y && l.y < vb.y + vb.h)
-    
+
+    const vbR = vb.x + vb.w
+    const vbB = vb.y + vb.h
+    visibleBuckets = svgBuckets.filter((b) =>
+      b.x + b.width > vb.x && b.x < vbR && b.y + b.height > vb.y && b.y < vbB
+    )
+
+    const visibleArrows = svgArrows.filter((a) =>
+      a.x > vb.x && a.x < vbR && ((a.y1 > vb.y && a.y1 < vbB) || (a.y2 > vb.y && a.y2 < vbB))
+    )
+
+    const visibleLabels = svgLabels.filter((l) => l.x > vb.x && l.x < vbR && l.y > vb.y && l.y < vbB)
+
     ctx.font = 'bold 14px "JetBrains Mono", monospace'
-    visibleLabels.forEach((label) => {
+    for (const label of visibleLabels) {
       ctx.fillStyle = label.isOld ? '#ff6b6b' : '#51cf66'
       ctx.fillText(label.text, label.x, label.y)
-    })
-    
-    visibleBuckets.forEach((b) => drawBucket(b, scaleX, scaleY))
-    
-    const t = getTheme()
-    visibleArrows.forEach((a) => {
-      ctx.strokeStyle = a.isOld ? t.arrowOld : t.arrowNew
-      ctx.lineWidth = 1.5 / Math.min(scaleX, scaleY)
+    }
+
+    const t = theme
+    for (const b of visibleBuckets) drawBucket(b, scaleX, scaleY, t)
+
+    const invScale = 1 / Math.min(scaleX, scaleY)
+    // Batch arrows by color
+    if (visibleArrows.length > 0) {
+      const lineW = 1.5 * invScale
+      ctx.lineWidth = lineW
+      // lines
+      ctx.strokeStyle = t.arrowNew
       ctx.beginPath()
-      ctx.moveTo(a.x, a.y1)
-      ctx.lineTo(a.x, a.y2)
+      for (const a of visibleArrows) { if (!a.isOld) { ctx.moveTo(a.x, a.y1); ctx.lineTo(a.x, a.y2) } }
       ctx.stroke()
-      ctx.fillStyle = a.isOld ? t.arrowOld : t.arrowNew
+      ctx.strokeStyle = t.arrowOld
       ctx.beginPath()
-      ctx.moveTo(a.x, a.y2)
-      ctx.lineTo(a.x - 4, a.y2 - 8)
-      ctx.lineTo(a.x + 4, a.y2 - 8)
-      ctx.closePath()
+      for (const a of visibleArrows) { if (a.isOld) { ctx.moveTo(a.x, a.y1); ctx.lineTo(a.x, a.y2) } }
+      ctx.stroke()
+      // arrowheads
+      ctx.fillStyle = t.arrowNew
+      ctx.beginPath()
+      for (const a of visibleArrows) { if (!a.isOld) { ctx.moveTo(a.x, a.y2); ctx.lineTo(a.x - 4, a.y2 - 8); ctx.lineTo(a.x + 4, a.y2 - 8); ctx.closePath() } }
       ctx.fill()
-    })
-    
+      ctx.fillStyle = t.arrowOld
+      ctx.beginPath()
+      for (const a of visibleArrows) { if (a.isOld) { ctx.moveTo(a.x, a.y2); ctx.lineTo(a.x - 4, a.y2 - 8); ctx.lineTo(a.x + 4, a.y2 - 8); ctx.closePath() } }
+      ctx.fill()
+    }
+
     ctx.resetTransform()
   }
   
-  function drawBucket(b, scaleX, scaleY) {
-    const th = getTheme()
-    let bucketStroke = b.isOld ? '#ff6b6b' : th.bucketStrokeNew
-    const strokeW = b.isOld ? 2 : bucketStrokeWidth
+  function drawBucket(b, scaleX, scaleY, th) {
+    const invScale = 1 / Math.min(scaleX, scaleY)
+    const bx = b.x, by = b.y, bp = b.padding
+    const rowW = b.width - padding * 2
+    const bxp = bx + bp
 
-    if (hovered && hovered.chainIdx === b.chainIdx && hovered.bucketIdx === b.bucketIdx && hovered.isOld === b.isOld) {
-      bucketStroke = b.isOld ? '#ff8787' : th.bucketHoverStrokeNew
-    }
+    const isBucketHovered = hovered !== null && hovered.chainIdx === b.chainIdx && hovered.bucketIdx === b.bucketIdx && hovered.isOld === b.isOld
 
+    // Bucket outline
     ctx.fillStyle = th.bucketFill
-    ctx.strokeStyle = bucketStroke
-    ctx.lineWidth = strokeW / Math.min(scaleX, scaleY)
+    ctx.strokeStyle = isBucketHovered
+      ? (b.isOld ? '#ff8787' : th.bucketHoverStrokeNew)
+      : (b.isOld ? '#ff6b6b' : th.bucketStrokeNew)
+    ctx.lineWidth = (b.isOld ? 2 : bucketStrokeWidth) * invScale
     ctx.beginPath()
-    ctx.roundRect(b.x, b.y, b.width, b.height, bucketRadius)
+    ctx.roundRect(bx, by, b.width, b.height, bucketRadius)
     ctx.fill()
     ctx.stroke()
 
+    // Header label
+    ctx.font = 'bold 11px "JetBrains Mono", monospace'
+    ctx.fillStyle = th.textMuted
+    ctx.textAlign = 'left'
     if (b.isMain && b.bucket.displayBid !== undefined) {
-      ctx.font = 'bold 11px "JetBrains Mono", monospace'
-      ctx.fillStyle = th.textMuted
-      ctx.textAlign = 'left'
-      ctx.fillText(`bid ${b.bucket.displayBid}`, b.x + b.padding, b.y + b.padding + 12)
-    }
-    if (!b.isMain) {
-      ctx.font = 'bold 11px "JetBrains Mono", monospace'
-      ctx.fillStyle = th.textMuted
-      ctx.textAlign = 'left'
-      ctx.fillText(`overflow`, b.x + b.padding, b.y + b.padding + 12)
+      ctx.fillText(`bid ${b.bucket.displayBid}`, bxp, by + bp + 12)
+    } else if (!b.isMain) {
+      ctx.fillText('overflow', bxp, by + bp + 12)
     }
 
-    const tophash = b.bucket?.tophash || []
-    const tophashWidth = b.width - b.padding * 2
-    const cellWidth = tophash.length > 0 ? tophashWidth / tophash.length : fixedTophashCellWidth
+    // Tophash
+    const tophash = b.bucket?.tophash
+    const tophashParsed = b.tophashParsed
+    const n = tophash ? tophash.length : 0
+    if (n > 0) {
+      const cellW = (b.width - bp * 2) / n
+      const thY = by + bp + bucketHeaderHeight
+      const thTextY = thY + tophashHeight / 1.5
 
-    tophash.forEach((tv, i) => {
-      let tophashColor = th.tophash[0]
-      const tVal = parseInt(tv)
-      if (!isNaN(tVal)) {
-        if (tVal >= 5) tophashColor = th.tophashGte5
-        else tophashColor = th.tophash[tVal] ?? th.tophash[0]
+      // Batch fills by color group (0-4 = tophash[], 5 = gte5)
+      const g0=[],g1=[],g2=[],g3=[],g4=[],g5=[]
+      const gs=[g0,g1,g2,g3,g4,g5]
+      for (let i = 0; i < n; i++) {
+        const v = tophashParsed[i]
+        gs[v >= 5 ? 5 : v < 0 ? 0 : v].push(i)
       }
-      ctx.fillStyle = tophashColor
+      const colors = [th.tophash[0],th.tophash[1],th.tophash[2],th.tophash[3],th.tophash[4],th.tophashGte5]
+      for (let g = 0; g < 6; g++) {
+        const group = gs[g]
+        if (group.length === 0) continue
+        ctx.fillStyle = colors[g] ?? th.tophash[0]
+        ctx.beginPath()
+        for (let j = 0; j < group.length; j++) ctx.rect(bxp + group[j] * cellW, thY, cellW, tophashHeight)
+        ctx.fill()
+      }
+      // Single stroke for all cells
       ctx.strokeStyle = th.tophashStroke
-      ctx.lineWidth = 1 / Math.min(scaleX, scaleY)
-      ctx.fillRect(b.x + b.padding + i * cellWidth, b.y + b.padding + bucketHeaderHeight, cellWidth, tophashHeight)
-      ctx.strokeRect(b.x + b.padding + i * cellWidth, b.y + b.padding + bucketHeaderHeight, cellWidth, tophashHeight)
+      ctx.lineWidth = invScale
+      ctx.beginPath()
+      for (let i = 0; i < n; i++) ctx.rect(bxp + i * cellW, thY, cellW, tophashHeight)
+      ctx.stroke()
+      // Text
       ctx.font = '12px "JetBrains Mono", monospace'
       ctx.fillStyle = th.tophashText
       ctx.textAlign = 'center'
-      ctx.fillText(tv, b.x + b.padding + i * cellWidth + cellWidth / 2, b.y + b.padding + bucketHeaderHeight + tophashHeight / 1.5)
-    })
-
-    const keys = b.bucket?.keys || []
-    const bucketTophash = b.bucket?.tophash || []
-    keys.forEach((k, i) => {
-      const isEmpty = bucketTophash[i] < 5
-      let fill = isEmpty ? th.keyFillEmpty : th.keyFill
-      if (hovered && hovered.type === 'key' && hovered.chainIdx === b.chainIdx && hovered.bucketIdx === b.bucketIdx && hovered.isOld === b.isOld && hovered.index === i) {
-        fill = th.keyHoverFill
-      }
-      ctx.fillStyle = fill
-      ctx.strokeStyle = th.keyStroke
-      ctx.lineWidth = 1 / Math.min(scaleX, scaleY)
-      ctx.fillRect(b.x + b.padding, b.y + b.padding + bucketHeaderHeight + tophashHeight + i * rowHeight, b.width - padding * 2, rowHeight)
-      ctx.strokeRect(b.x + b.padding, b.y + b.padding + bucketHeaderHeight + tophashHeight + i * rowHeight, b.width - padding * 2, rowHeight)
-      ctx.font = '13px "JetBrains Mono", monospace'
-      ctx.fillStyle = th.text
-      ctx.textAlign = 'left'
-      ctx.fillText(formatPreview(k, isEmpty), b.x + b.padding + 6, b.y + b.padding + bucketHeaderHeight + tophashHeight + i * rowHeight + rowHeight / 1.5)
-    })
-
-    const values = b.bucket?.values || []
-    const keysLen = keys.length
-    values.forEach((v, i) => {
-      const isEmpty = bucketTophash[i] < 5
-      let fill = isEmpty ? th.valueFillEmpty : th.valueFill
-      if (hovered && hovered.type === 'value' && hovered.chainIdx === b.chainIdx && hovered.bucketIdx === b.bucketIdx && hovered.isOld === b.isOld && hovered.index === i) {
-        fill = th.valueHoverFill
-      }
-      ctx.fillStyle = fill
-      ctx.strokeStyle = th.valueStroke
-      ctx.lineWidth = 1 / Math.min(scaleX, scaleY)
-      ctx.fillRect(b.x + b.padding, b.y + b.padding + bucketHeaderHeight + tophashHeight + keysLen * rowHeight + i * rowHeight, b.width - padding * 2, rowHeight)
-      ctx.strokeRect(b.x + b.padding, b.y + b.padding + bucketHeaderHeight + tophashHeight + keysLen * rowHeight + i * rowHeight, b.width - padding * 2, rowHeight)
-      ctx.font = '13px "JetBrains Mono", monospace'
-      ctx.fillStyle = th.text
-      ctx.fillText(formatPreview(v, isEmpty), b.x + b.padding + 6, b.y + b.padding + bucketHeaderHeight + tophashHeight + keysLen * rowHeight + i * rowHeight + rowHeight / 1.5)
-    })
-
-    if (b.bucket) {
-      const valuesLen = values.length
-      ctx.fillStyle = th.overflowFill
-      ctx.strokeStyle = th.overflowStroke
-      ctx.lineWidth = 1 / Math.min(scaleX, scaleY)
-      ctx.fillRect(b.x + b.padding, b.y + b.padding + bucketHeaderHeight + tophashHeight + keysLen * rowHeight + valuesLen * rowHeight, b.width - padding * 2, rowHeight)
-      ctx.strokeRect(b.x + b.padding, b.y + b.padding + bucketHeaderHeight + tophashHeight + keysLen * rowHeight + valuesLen * rowHeight, b.width - padding * 2, rowHeight)
-      ctx.font = '12px "JetBrains Mono", monospace'
-      ctx.fillStyle = th.text
-      ctx.fillText(b.bucket.overflow || '', b.x + b.padding + 6, b.y + b.padding + bucketHeaderHeight + tophashHeight + keysLen * rowHeight + valuesLen * rowHeight + rowHeight / 1.5)
+      const thex = b.tophashHex
+      for (let i = 0; i < n; i++) ctx.fillText(thex[i], bxp + i * cellW + cellW / 2, thTextY)
     }
 
+    // Keys
+    const tp = b.tophashParsed || []
+    const keysLen = b.bucket?.keys ? b.bucket.keys.length : 0
+    const keyBaseY = by + bp + bucketHeaderHeight + tophashHeight
+    if (keysLen > 0) {
+      let hovIdx = -1
+      const norm = [], empty = []
+      for (let i = 0; i < keysLen; i++) {
+        if (isBucketHovered && hovered.type === 'key' && hovered.index === i) hovIdx = i
+        else if (tp[i] < 5) empty.push(i)
+        else norm.push(i)
+      }
+      if (norm.length > 0) { ctx.fillStyle = th.keyFill; ctx.beginPath(); for (const i of norm) ctx.rect(bxp, keyBaseY + i * rowHeight, rowW, rowHeight); ctx.fill() }
+      if (empty.length > 0) { ctx.fillStyle = th.keyFillEmpty; ctx.beginPath(); for (const i of empty) ctx.rect(bxp, keyBaseY + i * rowHeight, rowW, rowHeight); ctx.fill() }
+      if (hovIdx >= 0) { ctx.fillStyle = th.keyHoverFill; ctx.beginPath(); ctx.rect(bxp, keyBaseY + hovIdx * rowHeight, rowW, rowHeight); ctx.fill() }
+      ctx.strokeStyle = th.keyStroke; ctx.lineWidth = invScale
+      ctx.beginPath(); for (let i = 0; i < keysLen; i++) ctx.rect(bxp, keyBaseY + i * rowHeight, rowW, rowHeight); ctx.stroke()
+      ctx.font = '13px "JetBrains Mono", monospace'; ctx.fillStyle = th.text; ctx.textAlign = 'left'
+      const kp = b.keyPreviews
+      for (let i = 0; i < keysLen; i++) ctx.fillText(kp[i] ?? '', bxp + 6, keyBaseY + i * rowHeight + rowHeight / 1.5)
+    }
+
+    // Values
+    const valLen = b.bucket?.values ? b.bucket.values.length : 0
+    const valBaseY = keyBaseY + keysLen * rowHeight
+    if (valLen > 0) {
+      let hovIdx = -1
+      const norm = [], empty = []
+      for (let i = 0; i < valLen; i++) {
+        if (isBucketHovered && hovered.type === 'value' && hovered.index === i) hovIdx = i
+        else if (tp[i] < 5) empty.push(i)
+        else norm.push(i)
+      }
+      if (norm.length > 0) { ctx.fillStyle = th.valueFill; ctx.beginPath(); for (const i of norm) ctx.rect(bxp, valBaseY + i * rowHeight, rowW, rowHeight); ctx.fill() }
+      if (empty.length > 0) { ctx.fillStyle = th.valueFillEmpty; ctx.beginPath(); for (const i of empty) ctx.rect(bxp, valBaseY + i * rowHeight, rowW, rowHeight); ctx.fill() }
+      if (hovIdx >= 0) { ctx.fillStyle = th.valueHoverFill; ctx.beginPath(); ctx.rect(bxp, valBaseY + hovIdx * rowHeight, rowW, rowHeight); ctx.fill() }
+      ctx.strokeStyle = th.valueStroke; ctx.lineWidth = invScale
+      ctx.beginPath(); for (let i = 0; i < valLen; i++) ctx.rect(bxp, valBaseY + i * rowHeight, rowW, rowHeight); ctx.stroke()
+      ctx.font = '13px "JetBrains Mono", monospace'; ctx.fillStyle = th.text; ctx.textAlign = 'left'
+      const vp = b.valuePreviews
+      for (let i = 0; i < valLen; i++) ctx.fillText(vp[i] ?? '', bxp + 6, valBaseY + i * rowHeight + rowHeight / 1.5)
+    }
+
+    // Overflow row
+    if (b.bucket) {
+      const ovY = valBaseY + valLen * rowHeight
+      ctx.fillStyle = th.overflowFill; ctx.strokeStyle = th.overflowStroke; ctx.lineWidth = invScale
+      ctx.beginPath(); ctx.rect(bxp, ovY, rowW, rowHeight); ctx.fill(); ctx.stroke()
+      ctx.font = '12px "JetBrains Mono", monospace'; ctx.fillStyle = th.text; ctx.textAlign = 'left'
+      ctx.fillText(b.bucket.overflow || '', bxp + 6, ovY + rowHeight / 1.5)
+    }
+
+    // Selected key highlight
     if (selectedKey && selectedKey.chainIdx === b.chainIdx && selectedKey.bucketIdx === b.bucketIdx && selectedKey.isOld === b.isOld) {
-      ctx.strokeStyle = '#ff0000'
-      ctx.lineWidth = 3 / Math.min(scaleX, scaleY)
-      ctx.strokeRect(b.x + b.padding, b.y + b.padding + bucketHeaderHeight + tophashHeight + selectedKey.index * rowHeight, b.width - padding * 2, rowHeight)
+      ctx.strokeStyle = '#ff0000'; ctx.lineWidth = 3 * invScale
+      ctx.strokeRect(bxp, keyBaseY + selectedKey.index * rowHeight, rowW, rowHeight)
     }
   }
   
@@ -563,52 +579,64 @@ function buildChains(bucketArray) {
       const dy = e.clientY - lastMouseY
       lastMouseX = e.clientX
       lastMouseY = e.clientY
-      const rect = document.getElementById('canvas-container')?.getBoundingClientRect()
-      if (!rect) return
+      const rect = containerRect
+      if (!rect || rect.width === 0) return
       let newVb = { ...vb }
       newVb.x -= (dx * vb.w) / rect.width
       newVb.y -= (dy * vb.h) / rect.height
       scheduleVbUpdate(newVb)
+      return
     }
     handleHover(e)
   }
   
+  function hoveredEqual(a, b) {
+    if (a === b) return true
+    if (!a || !b) return false
+    return a.type === b.type && a.chainIdx === b.chainIdx && a.bucketIdx === b.bucketIdx && a.isOld === b.isOld && a.index === b.index
+  }
+
   function handleHover(e) {
     if (!canvas) return
-    const rect = canvas.getBoundingClientRect()
-    const hoverX = ((e.clientX - rect.left) / rect.width) * vb.w + vb.x
-    const hoverY = ((e.clientY - rect.top) / rect.height) * vb.h + vb.y
-    let newHovered = null
-    
-    for (const b of svgBuckets) {
-      if (hoverX >= b.x + b.padding && hoverX <= b.x + b.width - b.padding) {
-        const keyYStart = b.y + b.padding + bucketHeaderHeight + tophashHeight
-        const keyYEnd = keyYStart + (b.bucket.keys || []).length * rowHeight
-        if (hoverY >= keyYStart && hoverY <= keyYEnd) {
-          const localY = hoverY - keyYStart
-          const index = Math.floor(localY / rowHeight)
-          newHovered = { type: 'key', chainIdx: b.chainIdx, bucketIdx: b.bucketIdx, isOld: b.isOld, index }
-          break
+    if (hoverRafId) return
+    hoverRafId = requestAnimationFrame(() => {
+      hoverRafId = null
+      const rect = containerRect
+      if (!rect || rect.width === 0) return
+      const hoverX = ((e.clientX - rect.left) / rect.width) * vb.w + vb.x
+      const hoverY = ((e.clientY - rect.top) / rect.height) * vb.h + vb.y
+      let newHovered = null
+
+      for (const b of visibleBuckets) {
+        if (hoverX >= b.x + b.padding && hoverX <= b.x + b.width - b.padding) {
+          const keyYStart = b.y + b.padding + bucketHeaderHeight + tophashHeight
+          const keyYEnd = keyYStart + (b.bucket.keys || []).length * rowHeight
+          if (hoverY >= keyYStart && hoverY <= keyYEnd) {
+            const localY = hoverY - keyYStart
+            const index = Math.floor(localY / rowHeight)
+            newHovered = { type: 'key', chainIdx: b.chainIdx, bucketIdx: b.bucketIdx, isOld: b.isOld, index }
+            break
+          }
+          const valueYStart = keyYEnd
+          const valueYEnd = valueYStart + (b.bucket.values || []).length * rowHeight
+          if (hoverY >= valueYStart && hoverY <= valueYEnd) {
+            const localY = hoverY - valueYStart
+            const index = Math.floor(localY / rowHeight)
+            newHovered = { type: 'value', chainIdx: b.chainIdx, bucketIdx: b.bucketIdx, isOld: b.isOld, index }
+            break
+          }
         }
-        const valueYStart = keyYEnd
-        const valueYEnd = valueYStart + (b.bucket.values || []).length * rowHeight
-        if (hoverY >= valueYStart && hoverY <= valueYEnd) {
-          const localY = hoverY - valueYStart
-          const index = Math.floor(localY / rowHeight)
-          newHovered = { type: 'value', chainIdx: b.chainIdx, bucketIdx: b.bucketIdx, isOld: b.isOld, index }
+        if (hoverX >= b.x && hoverX <= b.x + b.width && hoverY >= b.y && hoverY <= b.y + b.height) {
+          newHovered = { type: 'bucket', chainIdx: b.chainIdx, bucketIdx: b.bucketIdx, isOld: b.isOld }
           break
         }
       }
-      if (hoverX >= b.x && hoverX <= b.x + b.width && hoverY >= b.y && hoverY <= b.y + b.height) {
-        newHovered = { type: 'bucket', chainIdx: b.chainIdx, bucketIdx: b.bucketIdx, isOld: b.isOld }
-        break
+
+      if (!hoveredEqual(newHovered, hovered)) {
+        hovered = newHovered
+        drawCanvas()
       }
-    }
-    
-    if (JSON.stringify(newHovered) !== JSON.stringify(hovered)) {
-      hovered = newHovered
-      drawCanvas()
-    }
+    })
   }
   
   function handleSingleClick(e) {
@@ -661,29 +689,29 @@ function buildChains(bucketArray) {
   }
   
   function startResize(e) {
+    if (!containerEl) return
     resizing = true
     const startMouseX = e.clientX
     const startSideWidth = sideWidth
-    const container = document.getElementById('canvas-container')
-    if (!container) return
-    const initialRect = container.getBoundingClientRect()
-    const unitsPerPixel = vb.w / initialRect.width
-    
+    const unitsPerPixel = vb.w / containerRect.width
+
     const onMouseMove = (ev) => {
       if (!resizing) return
       const dx = startMouseX - ev.clientX
       const newSideWidth = Math.max(100, Math.min(800, startSideWidth + dx))
       const diffPx = newSideWidth - sideWidth
       sideWidth = newSideWidth
+      containerRect = { left: containerRect.left, top: containerRect.top, width: containerRect.width - diffPx, height: containerRect.height }
       let newVb = { ...vb }
       newVb.w -= diffPx * unitsPerPixel
       vb.w -= diffPx * unitsPerPixel
       syncVbAspect()
       scheduleVbUpdate(newVb)
     }
-    
+
     const onMouseUp = () => {
       resizing = false
+      containerRect = containerEl.getBoundingClientRect()
       window.removeEventListener('mousemove', onMouseMove)
       window.removeEventListener('mouseup', onMouseUp)
     }
@@ -693,10 +721,8 @@ function buildChains(bucketArray) {
   }
   
   function toggleSide() {
-    const container = document.getElementById('canvas-container')
-    if (!container) return
-    const rect = container.getBoundingClientRect()
-    const unitsPerPixel = vb.w / rect.width
+    if (!containerEl) return
+    const unitsPerPixel = vb.w / containerRect.width
     
     if (isSideVisible) {
       lastSideWidth = sideWidth
@@ -708,10 +734,10 @@ function buildChains(bucketArray) {
     }
     
     requestAnimationFrame(() => {
-      const newRect = container.getBoundingClientRect()
+      containerRect = containerEl.getBoundingClientRect()
       let newVb = { ...vb }
-      newVb.w = unitsPerPixel * newRect.width
-      newVb.h = newVb.w * (newRect.height / newRect.width)
+      newVb.w = unitsPerPixel * containerRect.width
+      newVb.h = newVb.w * (containerRect.height / containerRect.width)
       vb = newVb
       drawCanvas()
     })
@@ -784,16 +810,29 @@ function buildChains(bucketArray) {
   
   onMount(() => {
     ctx = canvas?.getContext('2d')
-    
+    containerEl = document.getElementById('canvas-container')
+
     const handleResize = () => {
+      if (!containerEl) return
+      containerRect = containerEl.getBoundingClientRect()
+      if (lastContainerWidth > 0 && containerRect.width > 0) {
+        vb = { ...vb, w: vb.w * (containerRect.width / lastContainerWidth) }
+      }
+      lastContainerWidth = containerRect.width
       syncVbAspect()
       drawCanvas()
     }
-    
+
     window.addEventListener('keydown', handleKeyDown)
     window.addEventListener('resize', handleResize)
-    
-    load()
+
+    requestAnimationFrame(() => {
+      if (containerEl) {
+        containerRect = containerEl.getBoundingClientRect()
+        lastContainerWidth = containerRect.width
+      }
+      load()
+    })
     connectWS()
     
     return () => {
@@ -804,7 +843,7 @@ function buildChains(bucketArray) {
   })
 </script>
 
-<div class="root" class:dark={darkMode}>
+<div class="root">
   <div
     id="canvas-container"
     on:wheel|nonpassive={handleWheel}
@@ -823,7 +862,7 @@ function buildChains(bucketArray) {
   {#if isSideVisible}
     <div class="splitter" on:mousedown={startResize}></div>
   {/if}
-  <div class="side" class:dark={darkMode} style="width: {sideWidth}px; display: {isSideVisible ? 'flex' : 'none'}; flex-direction: column;">
+  <div class="side" style="width: {sideWidth}px; display: {isSideVisible ? 'flex' : 'none'}; flex-direction: column;">
     <div class="side-content">
       <h3>hmap</h3>
       {#if hmap}
@@ -865,11 +904,6 @@ function buildChains(bucketArray) {
           <p class="empty-hint">Click on the bucket to analyze</p>
         {/if}
       </div>
-    </div>
-    <div class="theme-toggle-wrapper">
-      <button class="theme-btn" on:click={toggleTheme}>
-        {darkMode ? '☀ Light' : '☾ Dark'}
-      </button>
     </div>
   </div>
 </div>
@@ -914,39 +948,5 @@ function buildChains(bucketArray) {
   .hint-text { font-size: 11px; color: #666; margin-top: 5px; }
   .empty-hint { color: #999; font-size: 12px; font-style: italic; text-align: center; }
 
-  /* Theme toggle */
-  .theme-toggle-wrapper { padding: 10px 12px; border-top: 1px solid #ddd; flex-shrink: 0; }
-  .theme-btn {
-    width: 100%;
-    padding: 8px 0;
-    border-radius: 8px;
-    border: 1px solid #ccc;
-    background: #f0f0f0;
-    color: #333;
-    font-family: monospace;
-    font-size: 13px;
-    cursor: pointer;
-    transition: background 0.2s, color 0.2s, border-color 0.2s;
-  }
-  .theme-btn:hover { background: #e0e0e0; }
-
-  /* Dark mode */
-  .root.dark { background: #11111b; }
-  .root.dark .toggle-btn { background: #313244; color: #cdd6f4; border-color: #45475a; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4); }
-  .root.dark .splitter { background: #313244; }
-  .root.dark #canvas-container::before { filter: blur(5px) brightness(0.3); }
-  .side.dark { background: #1e1e2e; color: #cdd6f4; border-left-color: #313244; }
-  .side.dark .row { border-bottom-color: #313244; }
-  .side.dark h3 { color: #89b4fa; }
-  .side.dark .tree-label { color: #a6adc8; }
-  .side.dark .tree-container { background: #181825; border-color: #313244; }
-  .side.dark code { background: #313244; color: #cdd6f4; }
-  .side.dark .inspector-section { border-top-color: #313244; }
-  .side.dark .side-textarea { background: #181825; color: #cdd6f4; border-color: #313244; }
-  .side.dark .hint-text { color: #a6adc8; }
-  .side.dark .empty-hint { color: #585b70; }
-  .side.dark .theme-toggle-wrapper { border-top-color: #313244; }
-  .side.dark .theme-btn { background: #313244; color: #cdd6f4; border-color: #45475a; }
-  .side.dark .theme-btn:hover { background: #45475a; }
 </style>
 
