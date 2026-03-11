@@ -1,5 +1,5 @@
 ## About Project
-<img width="949" height="540" alt="{1CF60219-8A91-4235-848E-3CB0238DA8A6}" src="https://github.com/user-attachments/assets/7ad12e30-a046-4560-8f23-4a9cc8cd1cdc" />
+<img width="938" height="531" alt="{16EC5424-6A1B-4444-ADAF-D5E11F6B7D1E}" src="https://github.com/user-attachments/assets/e5f3d537-df0d-4c4a-bc95-0fe66b730704" />
 
 Это консольная программа с веб-визуализацией, которая наглядно показывает, как работает тип данных *map* в Go версии `<=1.23.x`. Оригинальный код работы map можно найти в исходниках языка [здесь](https://cs.opensource.google/go/go/+/release-branch.go1.23:src/runtime/map.go). Код тестировался и разрабатывался на версии `1.23.12`, поэтому настоятельно рекомендуется использовать именно эту версию.
 
