@@ -36,69 +36,33 @@ var (
 	blue   = color.New(color.FgBlue).SprintFunc()
 )
 
-func (c *Context) PrintlnLogError(a ...interface{}) {
-	i := make([]interface{}, 0, len(a)+1)
-	i = append(i, red("ERR"))
-	i = append(i, a...)
-	c.PrintlnLog(i...)
+func logArgs(prefix interface{}, a []interface{}) []interface{} {
+	out := make([]interface{}, len(a)+1)
+	out[0] = prefix
+	copy(out[1:], a)
+	return out
 }
 
-func (c *Context) PrintlnLogWarn(a ...interface{}) {
-	i := make([]interface{}, 0, len(a)+1)
-	i = append(i, yellow("WARN"))
-	i = append(i, a...)
-	c.PrintlnLog(i...)
-}
-
-func (c *Context) PrintlnLogGood(a ...interface{}) {
-	i := make([]interface{}, 0, len(a)+1)
-	i = append(i, green("GOOD"))
-	i = append(i, a...)
-	c.PrintlnLog(i...)
-}
-
-func (c *Context) PrintlnLogEvent(a ...interface{}) {
-	i := make([]interface{}, 0, len(a)+1)
-	i = append(i, blue("INFO"))
-	i = append(i, a...)
-	c.PrintlnLog(i...)
-}
+func (c *Context) PrintlnLogError(a ...interface{}) { c.PrintlnLog(logArgs(red("✗"), a)...) }
+func (c *Context) PrintlnLogWarn(a ...interface{})  { c.PrintlnLog(logArgs(yellow("⚠"), a)...) }
+func (c *Context) PrintlnLogGood(a ...interface{})  { c.PrintlnLog(logArgs(green("✓"), a)...) }
+func (c *Context) PrintlnLogEvent(a ...interface{}) { c.PrintlnLog(logArgs(blue("🛈"), a)...) }
 
 func (c *Context) PrintfLogError(prompt string, a ...interface{}) {
-	i := make([]interface{}, 0, len(a)+1)
-	i = append(i, red("ERR"))
-	i = append(i, fmt.Sprintf(prompt, a...))
-	c.PrintlnLog(i...)
+	c.PrintlnLog(red("✗"), fmt.Sprintf(prompt, a...))
 }
-
 func (c *Context) PrintfLogWarn(prompt string, a ...interface{}) {
-	i := make([]interface{}, 0, len(a)+1)
-	i = append(i, yellow("WARN"))
-	i = append(i, fmt.Sprintf(prompt, a...))
-	c.PrintlnLog(i...)
+	c.PrintlnLog(yellow("⚠"), fmt.Sprintf(prompt, a...))
 }
-
 func (c *Context) PrintfLogGood(prompt string, a ...interface{}) {
-	i := make([]interface{}, 0, len(a)+1)
-	i = append(i, green("GOOD"))
-	i = append(i, fmt.Sprintf(prompt, a...))
-	c.PrintlnLog(i...)
+	c.PrintlnLog(green("✓"), fmt.Sprintf(prompt, a...))
 }
-
 func (c *Context) PrintfLogEvent(prompt string, a ...interface{}) {
-	i := make([]interface{}, 0, len(a)+1)
-	i = append(i, blue("INFO"))
-	i = append(i, fmt.Sprintf(prompt, a...))
-	c.PrintlnLog(i...)
+	c.PrintlnLog(blue("🛈"), fmt.Sprintf(prompt, a...))
 }
-
 func (c *Context) PrintfLogWarn_(prompt string, a ...interface{}) {
-	i := make([]interface{}, 0, len(a)+1)
-	i = append(i, yellow("WARN "))
-	i = append(i, fmt.Sprintf(prompt, a...))
-	c.Print(i...)
+	c.Print(yellow("⚠ "), fmt.Sprintf(prompt, a...))
 }
-
 func (c *Context) PrintfLog(prompt string, a ...interface{}) {
 	c.PrintlnLog(fmt.Sprintf(prompt, a...))
 }

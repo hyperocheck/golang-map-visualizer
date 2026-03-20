@@ -43,32 +43,11 @@ var (
 	red    = color.New(color.FgRed).SprintFunc()
 	yellow = color.New(color.FgYellow).SprintFunc()
 	green  = color.New(color.FgGreen).SprintFunc()
-	blue   = color.New(color.FgBlue).SprintFunc()
 )
 
-func (c *Console) PrintlnLogError(a ...any) {
-	logs := make([]interface{}, 0, len(a)+1)
-	logs = append(logs, red("ERR"))
-	logs = append(logs, a...)
-
-	c.PrintlnLog(logs...)
-}
-
-func (c *Console) PrintlnLogWarn(a ...any) {
-	logs := make([]interface{}, 0, len(a)+1)
-	logs = append(logs, yellow("WARN"))
-	logs = append(logs, a...)
-
-	c.PrintlnLog(logs...)
-}
-
-func (c *Console) PrintlnLogGood(a ...any) {
-	logs := make([]interface{}, 0, len(a)+1)
-	logs = append(logs, green("GOOD"))
-	logs = append(logs, a...)
-
-	c.PrintlnLog(logs...)
-}
+func (c *Console) PrintlnLogError(a ...any) { c.PrintlnLog(append([]any{red("✗")}, a...)...) }
+func (c *Console) PrintlnLogWarn(a ...any)  { c.PrintlnLog(append([]any{yellow("⚠")}, a...)...) }
+func (c *Console) PrintlnLogGood(a ...any)  { c.PrintlnLog(append([]any{green("✓")}, a...)...) }
 
 func (c *Console) RegisterCommand(name, help string, handler CommandHandler) {
 	c.shell.AddCmd(&ishell.Cmd{

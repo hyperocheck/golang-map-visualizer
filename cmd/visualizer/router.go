@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"net/http"
 	"os"
@@ -15,7 +16,8 @@ import (
 	"github.com/fatih/color"
 )
 
-func startServer[K comparable, V any](t *engine.Meta[K, V], port string) error {
+func startServer[K comparable, V any](t *engine.Meta[K, V], port int) error {
+	addr := fmt.Sprintf(":%d", port)
 	mux := http.NewServeMux()
 	mux.HandleFunc("/vizual", t.VisualHandler)
 	mux.HandleFunc("/vizual_old", t.VisualOldHandler)
@@ -26,7 +28,7 @@ func startServer[K comparable, V any](t *engine.Meta[K, V], port string) error {
 	mux.Handle("/", http.FileServer(http.Dir("frontend/dist")))
 
 	srv := &http.Server{
-		Addr:    port,
+		Addr:    addr,
 		Handler: mux,
 	}
 
@@ -36,7 +38,7 @@ func startServer[K comparable, V any](t *engine.Meta[K, V], port string) error {
 	green := color.New(color.FgGreen).SprintfFunc()
 
 	go func() {
-		t.Console.PrintlnLog(green("Go to http://localhost%s\n", port))
+		t.Console.PrintlnLog(green("Go to http://localhost%s\n", addr))
 
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			log.Fatalf("listen error: %v", err)

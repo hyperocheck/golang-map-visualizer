@@ -48,59 +48,65 @@ func (m *Meta[K, V]) registerMapAccess1() {
 			stepN := 0
 			header := func(label string) {
 				stepN++
-				ctx.Printf("\n%s\n", cyan(bold(fmt.Sprintf("📎 step %d · %s", stepN, label))))
+				ctx.Printf("\n%s\n", cyan(bold(fmt.Sprintf("🌿Step %d %s", stepN, label))))
 			}
-			yes := func(s string) { ctx.Printf("  %s\n", green("✓ "+s)) }
-			no := func(s string) { ctx.Printf("  %s\n", red("✗ "+s)) }
-			note := func(s string) { ctx.Printf("  %s\n", dim("· "+s)) }
+			yes := func(s string) { ctx.Printf(" %s\n", green("✓ "+s)) }
+			no := func(s string) { ctx.Printf(" %s\n", red("✗ "+s)) }
+			note := func(s string) { ctx.Printf(" %s\n", dim("· "+s)) }
 
 			toBin := func(v uint64, bits int) string {
 				return fmt.Sprintf("%0*b", bits, v)
 			}
 
 			thLabel := func(th uint8) string {
-				switch th {
-				case 0:
-					return "emptyRest"
-				case 1:
-					return "emptyOne"
-				case 2:
-					return "evacX"
-				case 3:
-					return "evacY"
-				case 4:
-					return "evacEmpty"
-				default:
-					return fmt.Sprintf("%02x", th)
-				}
+				return fmt.Sprintf("%02x", th)
+				/*
+					switch th {
+					case 0:
+						return "emptyRest"
+					case 1:
+						return "emptyOne"
+					case 2:
+						return "evacX"
+					case 3:
+						return "evacY"
+					case 4:
+						return "evacEmpty"
+					default:
+						return fmt.Sprintf("%02x", th)
+					}
+				*/
 			}
 
-			// ── step 1 hash seed ────────────────────────────────────────
-			header("hash seed")
-			ctx.Printf("  hmap.hash0 = %s\n", yellow(fmt.Sprintf("%d", h.Hash0)))
-			ctx.Printf("  hmap.hash0 = %s\n", yellow(fmt.Sprintf("0b%s", toBin(uint64(h.Hash0), 32))))
+			// step 1 hash seed____________________________________________
+			header("Hash seed")
+			//ctx.Printf("  hmap.hash0 = %s\n", yellow(fmt.Sprintf("%d", h.Hash0)))
+			ctx.Printf("  hmap.hash0")
+			note("uint32")
+			ctx.Printf("       = %s\n", yellow(fmt.Sprintf("%s", toBin(uint64(h.Hash0), 32))))
 
 			// ── step 2 compute hash ─────────────────────────────────────
 			hash := FullHash(m, key)
-			header("compute hash")
-			ctx.Printf("  HashFunc(%s, %s)\n",
-				orange(fmt.Sprintf("%v", key)),
-				yellow(fmt.Sprintf("%d", h.Hash0)))
-			ctx.Printf("       = %s\n", yellow(fmt.Sprintf("%d (dec)", hash)))
-			ctx.Printf("       = %s\n", yellow(fmt.Sprintf("%s (bin)", toBin(uint64(hash), 64))))
+			header("Compute hash")
+			ctx.Printf("  maptype.Hasher(%s, %s)",
+				orange(fmt.Sprintf("&%v", key)),
+				yellow("hmap.hash0"))
+			note("func(unsafe.Pointer, uintptr) uintptr")
+			//ctx.Printf("       = %s\n", yellow(fmt.Sprintf("%d (dec)", hash)))
+			ctx.Printf("       = %s\n", yellow(fmt.Sprintf("%s", toBin(uint64(hash), 64))))
 
 			// ── step 3 bucket mask ──────────────────────────────────────
 			B := h.B
 			mask := uintptr(1)<<B - 1
-			header("bucket mask")
-			ctx.Printf("  h.B = %s\n", yellow(fmt.Sprintf("%d  →  2^B = %d buckets", B, uintptr(1)<<B)))
+			header("Bucket mask")
+			ctx.Printf("  hmap.B = %s\n", yellow(fmt.Sprintf("%d  →  2^B = %d buckets", B, uintptr(1)<<B)))
 			ctx.Printf("  mask = (1<<%d) - 1\n", B)
-			ctx.Printf("       = %s\n", yellow(fmt.Sprintf("%d", mask)))
+			//ctx.Printf("       = %s\n", yellow(fmt.Sprintf("%d", mask)))
 			ctx.Printf("       = %s\n", yellow(fmt.Sprintf("0b%s", toBin(uint64(mask), int(B)))))
 
 			// ── step 4 select bucket ────────────────────────────────────
 			bucketIdx := hash & mask
-			header("select bucket")
+			header("Select bucket")
 
 			const pw, bw = 9, 64
 			hashBin := toBin(uint64(hash), bw)
@@ -112,12 +118,12 @@ func (m *Meta[K, V]) registerMapAccess1() {
 			ctx.Printf("& mask : %s\n", yellow(maskBin))
 			ctx.Printf("%s\n", sep)
 			ctx.Printf("       = %s\n", yellow(resBin))
-			ctx.Printf("  bucket index = %s\n", bold(orange(fmt.Sprintf("%d", bucketIdx))))
+			ctx.Printf("  bid = %s\n", bold(orange(fmt.Sprintf("%d", bucketIdx))))
 
 			b := (*_bucket_[K, V])(unsafe.Add(h.buckets, bucketIdx*m.bucketSizeof))
 
 			// ── step 5 growing check ────────────────────────────────────
-			header("growing check  (h.oldbuckets)")
+			header("Growing check")
 			if h.oldbuckets == nil {
 				note("oldbuckets = nil → no grow in progress, use b as-is")
 			} else {
@@ -148,7 +154,7 @@ func (m *Meta[K, V]) registerMapAccess1() {
 			// ── step 6 compute tophash ──────────────────────────────────
 			top := tophash(hash)
 			ptrBits := 8 * int(unsafe.Sizeof(uintptr(0)))
-			header(fmt.Sprintf("compute tophash  (hash >> %d)", ptrBits-8))
+			header("compute tophash")
 			ctx.Printf("  top = uint8(hash >> %d)\n", ptrBits-8)
 			raw := uint8(hash >> uint(ptrBits-8))
 			if raw < 5 {
@@ -157,26 +163,26 @@ func (m *Meta[K, V]) registerMapAccess1() {
 			ctx.Printf("  top = %s\n", yellow(fmt.Sprintf("0x%02x  (%d)", top, top)))
 
 			// ── step 7 bucket chain scan ────────────────────────────────
-			header("bucket chain scan")
+			header("Bucket chain scan")
 			found := false
 			chainIdx := 0
 
 		CHAIN:
 			for curr := b; curr != nil; curr = (*_bucket_[K, V])(curr.overflow) {
-				ctx.Printf("\n  ╭─ ")
-				ctx.Printf("%s\n", cyan(fmt.Sprintf("chain node #%d", chainIdx)))
-				ctx.Printf("  │  tophash = [")
+				ctx.Printf("\n  ╭─")
+				//ctx.Printf("%s\n", cyan(fmt.Sprintf("chain node #%d", chainIdx)))
+				ctx.Printf("┤")
 				for i := 0; i < 8; i++ {
 					ctx.Printf("%s", yellow(thLabel(curr.tophash[i])))
 					if i < 7 {
 						ctx.Printf(" ")
 					}
 				}
-				ctx.Printf("]\n  │\n")
+				ctx.Printf("│\n  │\n")
 
 				for i := 0; i < 8; i++ {
 					th := curr.tophash[i]
-					ctx.Printf("  │  slot[%d]", i)
+					ctx.Printf("  │  tophash[%d]", i)
 
 					switch {
 					case th == 0: // emptyRest
@@ -188,7 +194,7 @@ func (m *Meta[K, V]) registerMapAccess1() {
 						continue
 
 					case th != top:
-						no(fmt.Sprintf("%s ≠ %s → next", thLabel(th), thLabel(top)))
+						no(fmt.Sprintf("%s ≠ %s", thLabel(th), thLabel(top)))
 						continue
 					}
 
@@ -196,12 +202,12 @@ func (m *Meta[K, V]) registerMapAccess1() {
 					yes(fmt.Sprintf("%02x = %02x → hash match, check key equality", th, top))
 
 					k := curr.keys[i]
-					ctx.Printf("  │  %s =? %s",
+					ctx.Printf("  │  %s ?= %s",
 						orange(fmt.Sprintf("%v", k)),
 						orange(fmt.Sprintf("%v", key)))
 					if any(k) == any(key) {
 						yes("key match")
-						ctx.Printf("  │  value = %s\n", yellow(fmt.Sprintf("%v", curr.values[i])))
+						ctx.Printf("  │  return value %s\n", yellow(fmt.Sprintf("%v", curr.values[i])))
 						found = true
 						break CHAIN
 					}
@@ -221,6 +227,7 @@ func (m *Meta[K, V]) registerMapAccess1() {
 			header("result")
 			if found {
 				yes(bold("FOUND"))
+
 			} else {
 				no("not found → return &zeroVal[0]  (zero value)")
 			}
