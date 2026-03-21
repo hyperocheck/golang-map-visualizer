@@ -57,6 +57,15 @@ func (c *Console) RegisterCommand(name, help string, handler CommandHandler) {
 	})
 }
 
+func (c *Console) RegisterCommandWithCompleter(name, help string, completer func([]string) []string, handler CommandHandler) {
+	c.shell.AddCmd(&ishell.Cmd{
+		Name:      name,
+		Help:      help,
+		Func:      handler,
+		Completer: completer,
+	})
+}
+
 func (c *Console) Run() {
 	c.shell.Run()
 }
@@ -75,39 +84,46 @@ func (m *NoMenuCompleter) Do(line []rune, pos int) (newLine [][]rune, length int
 	args := strings.Fields(typed)
 	isTrailingSpace := typed[len(typed)-1] == ' '
 
-	var suggestions [][]rune
-	var lastWord string
+	var prefix string
+	var searchArgs []string
 
 	if isTrailingSpace {
-		currentCmd, remaining := m.root.FindCmd(args)
+		prefix = ""
+		searchArgs = args
+	} else {
+		prefix = args[len(args)-1]
+		searchArgs = args[:len(args)-1]
+	}
+
+	var currentCmd *ishell.Cmd
+	var remaining []string
+
+	if len(searchArgs) == 0 {
+		currentCmd = m.root
+	} else {
+		currentCmd, remaining = m.root.FindCmd(searchArgs)
 		if currentCmd == nil || len(remaining) > 0 {
 			return nil, 0
 		}
-		for _, child := range currentCmd.Children() {
-			suggestions = append(suggestions, []rune(child.Name))
-		}
+	}
+
+	var words []string
+	if currentCmd.CompleterWithPrefix != nil {
+		words = currentCmd.CompleterWithPrefix(prefix, remaining)
+	} else if currentCmd.Completer != nil {
+		words = currentCmd.Completer(remaining)
 	} else {
-		lastWord = args[len(args)-1]
-		prefixArgs := args[:len(args)-1]
-
-		var currentCmd *ishell.Cmd
-		if len(prefixArgs) == 0 {
-			currentCmd = m.root
-		} else {
-			var remaining []string
-			currentCmd, remaining = m.root.FindCmd(prefixArgs)
-			if currentCmd == nil || len(remaining) > 0 {
-				return nil, 0
-			}
-		}
-
 		for _, child := range currentCmd.Children() {
-			if strings.HasPrefix(child.Name, lastWord) {
-				suffix := strings.TrimPrefix(child.Name, lastWord)
-				suggestions = append(suggestions, []rune(suffix))
-			}
+			words = append(words, child.Name)
 		}
 	}
 
-	return suggestions, len(lastWord)
+	var suggestions [][]rune
+	for _, w := range words {
+		if strings.HasPrefix(w, prefix) {
+			suggestions = append(suggestions, []rune(strings.TrimPrefix(w, prefix)))
+		}
+	}
+
+	return suggestions, len(prefix)
 }

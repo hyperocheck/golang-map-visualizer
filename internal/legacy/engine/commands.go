@@ -231,7 +231,14 @@ func (m *Meta[K, V]) CheckGeneratable() error {
 }
 
 func (m *Meta[K, V]) registerRange() {
-	m.Console.RegisterCommand("range", "range <insert|delete> <from> <to> [--life] — bulk operation on range of keys", func(ctx *ishell.Context) {
+	m.Console.RegisterCommandWithCompleter("range", "range <insert|delete> <from> <to> [--life] — bulk operation on range of keys",
+		func(args []string) []string {
+			if len(args) == 0 {
+				return []string{"insert", "delete"}
+			}
+			return nil
+		},
+		func(ctx *ishell.Context) {
 		if err := m.CheckGeneratable(); err != nil {
 			ctx.PrintlnLog(err)
 			return
