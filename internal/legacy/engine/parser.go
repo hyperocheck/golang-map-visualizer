@@ -11,6 +11,69 @@ type Parseable[T any] interface {
 	Parse(string) (T, error)
 }
 
+type Generatable[T any] interface {
+	FromIndex(n int64) (T, bool)
+}
+
+func FromIndex[T any](n int64) (T, bool) {
+	var zero T
+	if g, ok := any(zero).(Generatable[T]); ok {
+		return g.FromIndex(n)
+	}
+	return builtinFromIndex[T](n)
+}
+
+func builtinFromIndex[T any](n int64) (T, bool) {
+	var zero T
+	switch any(zero).(type) {
+	case int:
+		return any(int(n)).(T), true
+	case int8:
+		return any(int8(n)).(T), true
+	case int16:
+		return any(int16(n)).(T), true
+	case int32:
+		return any(int32(n)).(T), true
+	case int64:
+		return any(n).(T), true
+	case uint:
+		return any(uint(n)).(T), true
+	case uint8:
+		return any(uint8(n)).(T), true
+	case uint16:
+		return any(uint16(n)).(T), true
+	case uint32:
+		return any(uint32(n)).(T), true
+	case uint64:
+		return any(uint64(n)).(T), true
+	case string:
+		return any(strconv.FormatInt(n, 10)).(T), true
+	case bool:
+		switch n {
+		case 0:
+			return any(false).(T), true
+		case 1:
+			return any(true).(T), true
+		}
+		return zero, false
+	}
+	return zero, false
+}
+
+func IsGeneratable[T any]() bool {
+	var zero T
+	if _, ok := any(zero).(Generatable[T]); ok {
+		return true
+	}
+	switch any(zero).(type) {
+	case int, int8, int16, int32, int64,
+		uint, uint8, uint16, uint32, uint64,
+		string, bool:
+		return true
+	}
+	return false
+}
+
 func ParseValue[T any](s string) (T, error) {
 	var zero T
 

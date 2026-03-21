@@ -1,16 +1,20 @@
 package main
 
 import (
-	"visualizer/internal/flags"
 	"visualizer/internal/legacy/engine"
 )
 
 func main() {
-	m := make(engine.Map[int, int], 1)
+	m := make(engine.Map[string, int])
 
-	for i := flags.Flag.From; i < flags.Flag.To; i++ {
-		m[i] = i
-	}
+	// m - обычная мапа, с ней точно такое же взаимодействие
+	// здесь можно с ней предварительно сделать что угодно
 
-	work(m)
+	/*
+		for i := flags.Flag.From; i < flags.Flag.To; i++ {
+			// m[i] = i
+		}
+	*/
+
+	work(m) // не удалять :)
 }

@@ -123,8 +123,8 @@ func (m *Meta[K, V]) registerDelete() {
 }
 
 func (m *Meta[K, V]) registerEvil() {
-	m.Console.RegisterCommand("evil", "evil <count> [--life] [--bid <int>] — insert keys into target bucket (map[int]int only)", func(ctx *ishell.Context) {
-		if err := m.CheckTypeInt(); err != nil {
+	m.Console.RegisterCommand("evil", "evil <count> [--life] [--bid <int>] — insert keys into target bucket", func(ctx *ishell.Context) {
+		if err := m.CheckGeneratable(); err != nil {
 			ctx.PrintlnLogError(err)
 			return
 		}
@@ -162,15 +162,20 @@ func (m *Meta[K, V]) registerEvil() {
 				BUCKET_NUM = uint8(bid)
 			}
 		}
-		probe := 0
+
+		probe := int64(0)
 		inserted := 0
 		totalAttempts := 0
 
 		if liveMode {
 			ctx.Println("Evil mode (live): inserting", count, "keys with live updates...")
 			for inserted < count {
-				key := any(probe).(K)
-				val := any(probe).(V)
+				key, ok := FromIndex[K](probe)
+				if !ok {
+					ctx.PrintlnLogError(fmt.Sprintf("Key type exhausted after %d insertions — no more possible keys", inserted))
+					break
+				}
+				val, _ := FromIndex[V](probe)
 				totalAttempts++
 
 				if BUCKET_NUM == CheckHash(m, key) {
@@ -192,8 +197,12 @@ func (m *Meta[K, V]) registerEvil() {
 		} else {
 			ctx.Println("Evil mode (batch): inserting", count, "keys...")
 			for inserted < count {
-				key := any(probe).(K)
-				val := any(probe).(V)
+				key, ok := FromIndex[K](probe)
+				if !ok {
+					ctx.PrintlnLogError(fmt.Sprintf("Key type exhausted after %d insertions — no more possible keys", inserted))
+					break
+				}
+				val, _ := FromIndex[V](probe)
 				totalAttempts++
 
 				if BUCKET_NUM == CheckHash(m, key) {
@@ -208,25 +217,22 @@ func (m *Meta[K, V]) registerEvil() {
 		}
 		totalAttempts = 0
 		ctx.PrintfLogGood("Evil mode completed! Inserted %d keys, total attempts: %d", count, totalAttempts)
-
-		//ctx.PrintfLogEvent("Evil mode completed!")
 	})
 }
 
-func (m *Meta[K, V]) CheckTypeInt() error {
-	if m.ktype != "int" {
-		return fmt.Errorf("Range command works only with map[int]int!")
+func (m *Meta[K, V]) CheckGeneratable() error {
+	if !IsGeneratable[K]() {
+		return fmt.Errorf("evil/range requires Generatable key type (implement Generatable[K] interface)")
 	}
-	if m.vtype != "int" {
-		return fmt.Errorf("Range command works only with map[int]int!")
+	if !IsGeneratable[V]() {
+		return fmt.Errorf("evil/range requires Generatable value type (implement Generatable[V] interface)")
 	}
-
 	return nil
 }
 
 func (m *Meta[K, V]) registerRange() {
-	m.Console.RegisterCommand("range", "range <insert|delete> <from> <to> [--life] — bulk operation on range of keys (map[int]int only)", func(ctx *ishell.Context) {
-		if err := m.CheckTypeInt(); err != nil {
+	m.Console.RegisterCommand("range", "range <insert|delete> <from> <to> [--life] — bulk operation on range of keys", func(ctx *ishell.Context) {
+		if err := m.CheckGeneratable(); err != nil {
 			ctx.PrintlnLog(err)
 			return
 		}
@@ -243,13 +249,13 @@ func (m *Meta[K, V]) registerRange() {
 			return
 		}
 
-		from, err := strconv.Atoi(args[1])
+		from, err := strconv.ParseInt(args[1], 10, 64)
 		if err != nil {
 			ctx.PrintlnLogError("Invalid from:", args[1])
 			return
 		}
 
-		to, err := strconv.Atoi(args[2])
+		to, err := strconv.ParseInt(args[2], 10, 64)
 		if err != nil {
 			ctx.PrintlnLogError("Invalid to:", args[2])
 			return
@@ -273,10 +279,14 @@ func (m *Meta[K, V]) registerRange() {
 
 		if op == "insert" {
 			if liveMode {
-				ctx.Printf("Range insert (live): keys from %d to %d...\n", from, to)
+				ctx.Printf("Range insert (live): indices from %d to %d...\n", from, to)
 				for i := from; i <= to; i++ {
-					key := any(i).(K)
-					val := any(i).(V)
+					key, ok := FromIndex[K](i)
+					if !ok {
+						ctx.PrintlnLogError(fmt.Sprintf("Key type exhausted at index %d", i))
+						break
+					}
+					val, _ := FromIndex[V](i)
 					if _, exists := m.Map[key]; exists {
 						skipped++
 						continue
@@ -288,10 +298,14 @@ func (m *Meta[K, V]) registerRange() {
 					ctx.PrintfLogEvent("Inserted key %v : val %v", key, val)
 				}
 			} else {
-				ctx.PrintfLog("Range insert (batch): keys from %d to %d...", from, to)
+				ctx.PrintfLog("Range insert (batch): indices from %d to %d...", from, to)
 				for i := from; i <= to; i++ {
-					key := any(i).(K)
-					val := any(i).(V)
+					key, ok := FromIndex[K](i)
+					if !ok {
+						ctx.PrintlnLogError(fmt.Sprintf("Key type exhausted at index %d", i))
+						break
+					}
+					val, _ := FromIndex[V](i)
 					if _, exists := m.Map[key]; exists {
 						skipped++
 					} else {
@@ -304,9 +318,13 @@ func (m *Meta[K, V]) registerRange() {
 			ctx.PrintfLogGood("Range insert done! Inserted: %d, skipped (already exist): %d", affected, skipped)
 		} else {
 			if liveMode {
-				ctx.Printf("Range delete (live): keys from %d to %d...\n", from, to)
+				ctx.Printf("Range delete (live): indices from %d to %d...\n", from, to)
 				for i := from; i <= to; i++ {
-					key := any(i).(K)
+					key, ok := FromIndex[K](i)
+					if !ok {
+						ctx.PrintlnLogError(fmt.Sprintf("Key type exhausted at index %d", i))
+						break
+					}
 					if _, exists := m.Map[key]; !exists {
 						skipped++
 						continue
@@ -318,9 +336,13 @@ func (m *Meta[K, V]) registerRange() {
 					ctx.PrintfLogEvent("Deleted key %v", key)
 				}
 			} else {
-				ctx.PrintfLog("Range delete (batch): keys from %d to %d...", from, to)
+				ctx.PrintfLog("Range delete (batch): indices from %d to %d...", from, to)
 				for i := from; i <= to; i++ {
-					key := any(i).(K)
+					key, ok := FromIndex[K](i)
+					if !ok {
+						ctx.PrintlnLogError(fmt.Sprintf("Key type exhausted at index %d", i))
+						break
+					}
 					if _, exists := m.Map[key]; exists {
 						delete(m.Map, key)
 						affected++
@@ -412,82 +434,52 @@ func PrintHmap2[K comparable, V any](
 }
 
 func buildHelpMessage() string {
-	rgb := func(r, g, b int, s string) string {
-		return fmt.Sprintf("\x1b[38;2;%d;%d;%dm%s\x1b[0m", r, g, b, s)
-	}
-	y := func(s string) string { return rgb(255, 195, 55, s) }  // amber  — commands
-	d := func(s string) string { return rgb(115, 115, 135, s) } // dim    — args & notes
-	w := func(s string) string { return rgb(210, 215, 225, s) } // white  — descriptions
-	tl := func(s string) string { return rgb(55, 195, 210, s) } // teal   — flags
-	p := func(s string) string { return rgb(160, 120, 255, s) } // purple — section headers
+	return `
+  Help!
+  ──────────────────────────────────────────────────────────
 
-	row := func(cmd, args, desc string) string {
-		return fmt.Sprintf("│    %s%s%s",
-			y(fmt.Sprintf("%-8s", cmd)),
-			d(fmt.Sprintf("%-14s", args)),
-			w(desc),
-		)
-	}
-	flag := func(name, desc string) string {
-		return fmt.Sprintf("│             %s     %s", tl("╰──➤  "+name), d(desc))
-	}
-	sec := func(name string) string {
-		return "│  " + p("▸ "+name)
-	}
+  insert <key> <value>
+      Add a new key-value pair. Value can be JSON for custom types.
+      > insert 42 100                                  | map[int]int 
+      > insert hello world                             | map[string]string 
+      > insert foo '{"nums":[1,2,3],"active":true}'    | map[string]Stats
 
-	raw := []string{
-		"╭────────────────────────────────────────────────────────────────────",
-		"│",
-		sec("Map Operations"),
-		"│",
-		row("insert", "<key> <value>", "Insert a key-value pair  (comparable, any)"),
-		row("update", "<key> <value>", "Update a key-value pair  (comparable, any)"),
-		row("delete", "<key>", "Delete a key-value pair by key  (comparable)"),
-		"│",
-		sec("Bulk Operations"),
-		"│",
-		row("range", "<insert|delete> <from> <to> ", "Insert or delete a range of keys  (int, int)"),
-		flag("--life", "step-by-step live mode"),
-		"│",
-		row("evil", "<n>", "Collision attack: n keys into target bucket"),
-		flag("--life", "step-by-step live mode"),
-		flag("--bid <int>", "target bucket number (default: 0)"),
-		"│",
-		sec("Inspection"),
-		"│",
-		row("show", "", "Display all key-value pairs"),
-		row("hmap", "", "Print internal hmap structure"),
-		row("mapaccess1", " <key>", "Step-by-step simulation of mapaccess1"),
-		"│",
-		"╰─────────────────────────────────────────────────────────────────────",
-	}
+  update <key> <value>
+      Update value for an existing key.
+      > update 42 999
 
-	sR, sG, sB := 80, 220, 100
-	eR, eG, eB := 50, 155, 210
-	total := len(raw)
+  delete <key>
+      Remove a key from the map.
+      > delete 42
 
-	var buf strings.Builder
-	//buf.WriteString("\n")
+  range <insert|delete> <from> <to> [--life]
+      Insert or delete keys by index range [from, to].
+      Key and value at index N are generated via FromIndex(N).
+      For int:    range insert 0 9   →  0→0, 1→1, ..., 9→9
+      For string: range insert 0 9   →  "0"→"0", ..., "9"→"9"
+      For bool:   range insert 0 1   →  false→false, true→true
+      --life  step-by-step with 100ms delay between insertions
+      > range insert 0 19
+      > range delete 5 10 --life
 
-	for i, line := range raw {
-		frac := float64(i) / float64(total-1)
-		r := int(float64(sR) + frac*float64(eR-sR))
-		g := int(float64(sG) + frac*float64(eG-sG))
-		b := int(float64(sB) + frac*float64(eB-sB))
+  evil <count> [--bid <int>] [--life]
+      Collision attack: insert <count> keys that all hash to the
+      same bucket. Keys are probed sequentially via FromIndex(N).
+      --bid <int>  target bucket number (default: 0)
+      --life       step-by-step with 500ms delay between insertions
+      > evil 8
+      > evil 4 --bid 2 --life
 
-		if strings.ContainsRune(line, '\x1b') {
-			runes := []rune(line)
-			buf.WriteString(rgb(r, g, b, string(runes[:1])) + string(runes[1:]) + "\n")
-		} else {
-			if i == len(raw)-1 {
-				buf.WriteString(rgb(r, g, b, line))
-			} else {
-				buf.WriteString(rgb(r, g, b, line) + "\n")
-			}
-		}
-	}
+  show
+      Print all key-value pairs in the map.
 
-	return buf.String()
+  hmap
+      Print internal hmap struct fields (count, B, hash0, buckets...).
+
+  mapaccess1 <key>
+      Simulate Go's mapaccess1 step by step for the given key.
+      > mapaccess1 42
+`
 }
 
 func (m *Meta[K, V]) registerHelp() {
