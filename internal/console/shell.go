@@ -73,29 +73,38 @@ func (m *NoMenuCompleter) Do(line []rune, pos int) (newLine [][]rune, length int
 	}
 
 	args := strings.Fields(typed)
-	isTrailingSpace := len(typed) > 0 && typed[len(typed)-1] == ' '
-
-	currentCmd, _ := m.root.FindCmd(args)
-	if currentCmd == nil {
-		currentCmd = m.root
-	}
+	isTrailingSpace := typed[len(typed)-1] == ' '
 
 	var suggestions [][]rune
 	var lastWord string
 
 	if isTrailingSpace {
+		currentCmd, remaining := m.root.FindCmd(args)
+		if currentCmd == nil || len(remaining) > 0 {
+			return nil, 0
+		}
 		for _, child := range currentCmd.Children() {
 			suggestions = append(suggestions, []rune(child.Name))
 		}
-		lastWord = ""
 	} else {
-		if len(args) > 0 {
-			lastWord = args[len(args)-1]
-			for _, child := range currentCmd.Children() {
-				if strings.HasPrefix(child.Name, lastWord) {
-					suffix := strings.TrimPrefix(child.Name, lastWord)
-					suggestions = append(suggestions, []rune(suffix))
-				}
+		lastWord = args[len(args)-1]
+		prefixArgs := args[:len(args)-1]
+
+		var currentCmd *ishell.Cmd
+		if len(prefixArgs) == 0 {
+			currentCmd = m.root
+		} else {
+			var remaining []string
+			currentCmd, remaining = m.root.FindCmd(prefixArgs)
+			if currentCmd == nil || len(remaining) > 0 {
+				return nil, 0
+			}
+		}
+
+		for _, child := range currentCmd.Children() {
+			if strings.HasPrefix(child.Name, lastWord) {
+				suffix := strings.TrimPrefix(child.Name, lastWord)
+				suggestions = append(suggestions, []rune(suffix))
 			}
 		}
 	}
