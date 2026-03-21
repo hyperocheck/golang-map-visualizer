@@ -81,19 +81,25 @@ func (t *Meta[K, V]) GetBucketsJSON(btype MapBucketType) ([]byte, error) {
 	for i := uintptr(0); i < bucketCount; i++ {
 		bucket := (*_bucket_[K, V])(unsafe.Add(buckets, i*t.bucketSizeof))
 
-		b := bucketJSON[K, V]{
-			Tophash:  bucket.tophash,
-			Keys:     bucket.keys,
-			Values:   bucket.values,
-			Overflow: "0x" + strconv.FormatUint(uint64(uintptr(bucket.overflow)), 16),
-		}
-
+		var keys [8]K
+		var values [8]V
 		emptySlots := 0
 		for j := range 8 {
 			if bucket.tophash[j] < 5 {
 				emptySlots++
+			} else {
+				keys[j] = bucket.keys[j]
+				values[j] = bucket.values[j]
 			}
 		}
+
+		b := bucketJSON[K, V]{
+			Tophash:  bucket.tophash,
+			Keys:     keys,
+			Values:   values,
+			Overflow: "0x" + strconv.FormatUint(uint64(uintptr(bucket.overflow)), 16),
+		}
+
 		if emptySlots == 8 {
 			emptyBucketsCount++
 		}
@@ -108,19 +114,25 @@ func (t *Meta[K, V]) GetBucketsJSON(btype MapBucketType) ([]byte, error) {
 		for currOverflow != nil {
 			bucket := (*_bucket_[K, V])(unsafe.Pointer(currOverflow))
 
-			b := bucketJSON[K, V]{
-				Tophash:  bucket.tophash,
-				Keys:     bucket.keys,
-				Values:   bucket.values,
-				Overflow: "0x" + strconv.FormatUint(uint64(uintptr(bucket.overflow)), 16),
-			}
-
+			var keys [8]K
+			var values [8]V
 			emptySlots := 0
 			for j := range 8 {
 				if bucket.tophash[j] < 5 {
 					emptySlots++
+				} else {
+					keys[j] = bucket.keys[j]
+					values[j] = bucket.values[j]
 				}
 			}
+
+			b := bucketJSON[K, V]{
+				Tophash:  bucket.tophash,
+				Keys:     keys,
+				Values:   values,
+				Overflow: "0x" + strconv.FormatUint(uint64(uintptr(bucket.overflow)), 16),
+			}
+
 			if emptySlots == 8 {
 				emptyBucketsCount++
 			}
