@@ -1,3 +1,5 @@
+[![Static Badge](https://img.shields.io/badge/English-green?style=plastic)](README.md) [![Static Badge](https://img.shields.io/badge/%D0%A0%D1%83%D1%81%D1%81%D0%BA%D0%B8%D0%B9-green?style=plastic)](README.ru.md)
+
 ## About Project
 <img width="960" height="540" alt="{1702FD80-222C-4F6E-91A3-AD43DB61C7CC}" src="https://github.com/user-attachments/assets/dcb2ec66-fb5d-4ebe-9f19-e503f082902d" />
 
